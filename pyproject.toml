@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nutrilive-backend"
+version = "0.1.0"
+description = "Python backend for NutriLive real-time voice orchestration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+  "pydantic-settings>=2.10.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0",
+  "pytest-asyncio>=1.1.0",
+  "httpx>=0.28.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
