@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from app.config import get_settings
 from app.contracts.nutrition import Meal
-from app.schemas import AudioChunkEvent, SessionCreateResponse, TextEvent
+from app.schemas import AudioChunkEvent, NutritionProgressRequest, SessionCreateResponse, TextEvent
 from app.services.live_bridge import LiveBridge
-from app.services.nutrition import calculate_daily_stats
+from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
 
 settings = get_settings()
@@ -90,6 +90,11 @@ def cleanup_live_sessions(max_age_minutes: int = 60) -> dict:
 def get_daily_stats(meals: list[Meal]) -> dict:
     stats = calculate_daily_stats(meals)
     return stats.model_dump()
+
+
+@app.post("/v1/nutrition/progress")
+def get_nutrition_progress(payload: NutritionProgressRequest) -> dict:
+    return calculate_progress(payload.meals, payload.goals)
 
 
 @app.websocket("/v1/live/ws/{session_id}")

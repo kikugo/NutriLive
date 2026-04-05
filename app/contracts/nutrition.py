@@ -29,3 +29,11 @@ class DailyStats(BaseModel):
     carbs: int = Field(ge=0)
     fat: int = Field(ge=0)
     fiber: int = Field(ge=0)
+
+
+class NutritionGoals(BaseModel):
+    calories: int = Field(ge=0)
+    protein: int = Field(ge=0)
+    carbs: int = Field(ge=0)
+    fat: int = Field(ge=0)
+    fiber: int = Field(ge=0)

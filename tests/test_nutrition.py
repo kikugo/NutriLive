@@ -55,3 +55,33 @@ def test_daily_stats_endpoint_rejects_invalid_meal_payload() -> None:
     ]
     response = client.post("/v1/nutrition/daily-stats", json=payload)
     assert response.status_code == 422
+
+
+def test_nutrition_progress_endpoint_returns_goal_progress() -> None:
+    payload = {
+        "meals": [
+            {
+                "name": "Chicken bowl",
+                "calories": 500,
+                "protein": 40,
+                "carbs": 35,
+                "fat": 20,
+                "fiber": 8,
+                "timestamp": "2026-04-05T12:00:00Z",
+                "type": "lunch",
+            }
+        ],
+        "goals": {
+            "calories": 1800,
+            "protein": 120,
+            "carbs": 180,
+            "fat": 60,
+            "fiber": 30,
+        },
+    }
+    response = client.post("/v1/nutrition/progress", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["calories"]["consumed"] == 500
+    assert body["calories"]["remaining"] == 1300
+    assert body["protein"]["goal"] == 120

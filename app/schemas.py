@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.contracts.nutrition import Meal, NutritionGoals
+
 
 class SessionCreateResponse(BaseModel):
     session_id: str = Field(..., description="Server-generated session id")
@@ -31,3 +33,8 @@ class PrepareMealLogArgs(BaseModel):
     fat: int
     fiber: int
     type: Literal["breakfast", "lunch", "dinner", "snack"]
+
+
+class NutritionProgressRequest(BaseModel):
+    meals: list[Meal]
+    goals: NutritionGoals
