@@ -62,3 +62,19 @@ def test_ws_rejects_invalid_text_payload() -> None:
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
         assert error_event["message"] == "Invalid text payload"
+
+
+def test_ws_requires_start_before_streaming() -> None:
+    response = client.post("/v1/live/session")
+    session_id = response.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "audio_chunk",
+                "audio": {"data": "AAA=", "mime_type": "audio/pcm;rate=16000"},
+            }
+        )
+        error_event = websocket.receive_json()
+        assert error_event["type"] == "error"

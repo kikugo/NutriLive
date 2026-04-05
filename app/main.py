@@ -63,7 +63,10 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
             event_type = payload.get("type")
 
             if event_type == "start":
-                await live_bridge.handle_start(websocket)
+                try:
+                    await live_bridge.handle_start(websocket)
+                except RuntimeError as exc:
+                    await websocket.send_json({"type": "error", "message": str(exc)})
             elif event_type == "audio_chunk":
                 try:
                     validated_payload = AudioChunkEvent.model_validate(payload).model_dump()
@@ -75,7 +78,10 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
                         }
                     )
                     continue
-                await live_bridge.handle_audio_chunk(websocket, validated_payload)
+                try:
+                    await live_bridge.handle_audio_chunk(websocket, validated_payload)
+                except RuntimeError as exc:
+                    await websocket.send_json({"type": "error", "message": str(exc)})
             elif event_type == "text":
                 try:
                     validated_payload = TextEvent.model_validate(payload).model_dump()
@@ -87,9 +93,15 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
                         }
                     )
                     continue
-                await live_bridge.handle_text(websocket, validated_payload)
+                try:
+                    await live_bridge.handle_text(websocket, validated_payload)
+                except RuntimeError as exc:
+                    await websocket.send_json({"type": "error", "message": str(exc)})
             elif event_type == "stop":
-                await live_bridge.handle_stop(websocket)
+                try:
+                    await live_bridge.handle_stop(websocket)
+                except RuntimeError as exc:
+                    await websocket.send_json({"type": "error", "message": str(exc)})
                 break
             elif event_type == "close":
                 break

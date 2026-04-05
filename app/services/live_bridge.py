@@ -1,6 +1,7 @@
 from fastapi import WebSocket
 
 from app.schemas import PrepareMealLogArgs
+from app.services.upstream import UpstreamClient
 
 
 class LiveBridge:
@@ -9,7 +10,11 @@ class LiveBridge:
     deterministic responses while full Gemini Live proxying is wired.
     """
 
+    def __init__(self, upstream_client: UpstreamClient | None = None) -> None:
+        self._upstream_client = upstream_client or UpstreamClient()
+
     async def handle_start(self, websocket: WebSocket) -> None:
+        await self._upstream_client.start()
         await websocket.send_json(
             {
                 "type": "ready",
@@ -27,6 +32,7 @@ class LiveBridge:
             await websocket.send_json({"type": "error", "message": "Missing audio.data"})
             return
 
+        await self._upstream_client.send_audio_chunk(data, mime_type)
         await websocket.send_json(
             {
                 "type": "server_ack",
@@ -43,15 +49,16 @@ class LiveBridge:
             return
 
         await websocket.send_json({"type": "user_transcript", "text": text, "finished": True})
+        upstream_response = await self._upstream_client.send_text(text)
         await websocket.send_json(
             {
                 "type": "model_transcript",
-                "text": f"I heard: {text}",
+                "text": upstream_response.text,
                 "finished": True,
             }
         )
 
-        if "log meal" in text.lower():
+        if upstream_response.tool_call:
             meal_args = PrepareMealLogArgs(
                 name="Estimated meal",
                 calories=450,
@@ -70,6 +77,7 @@ class LiveBridge:
             )
 
     async def handle_stop(self, websocket: WebSocket) -> None:
+        await self._upstream_client.stop()
         await websocket.send_json({"type": "done", "reason": "client_stop"})
 
 
