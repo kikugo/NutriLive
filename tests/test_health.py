@@ -23,6 +23,7 @@ def test_get_live_session_returns_found_after_create() -> None:
     body = response.json()
     assert body["found"] is True
     assert body["session_id"] == session_id
+    assert "last_activity_at" in body
 
 
 def test_live_stats_returns_counts() -> None:
@@ -67,3 +68,12 @@ def test_live_sessions_endpoint_supports_status_filter() -> None:
     assert response.status_code == 200
     body = response.json()
     assert isinstance(body["sessions"], list)
+
+
+def test_expire_idle_endpoint_returns_removed_count() -> None:
+    client.post("/v1/live/session")
+    response = client.post("/v1/live/expire-idle?max_idle_minutes=-1")
+    assert response.status_code == 200
+    body = response.json()
+    assert "removed" in body
+    assert body["max_idle_minutes"] == -1

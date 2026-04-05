@@ -10,6 +10,9 @@ class LiveSession:
     created_at: datetime = field(
         default_factory=lambda: datetime.now(tz=timezone.utc)
     )
+    last_activity_at: datetime = field(
+        default_factory=lambda: datetime.now(tz=timezone.utc)
+    )
     status: str = "created"
 
 
@@ -32,6 +35,13 @@ class SessionStore:
             session = self._sessions.get(session_id)
             if session:
                 session.status = status
+                session.last_activity_at = datetime.now(tz=timezone.utc)
+
+    def touch(self, session_id: str) -> None:
+        with self._lock:
+            session = self._sessions.get(session_id)
+            if session:
+                session.last_activity_at = datetime.now(tz=timezone.utc)
 
     def cleanup_older_than(self, max_age_minutes: int) -> int:
         cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=max_age_minutes)
@@ -40,6 +50,18 @@ class SessionStore:
                 session_id
                 for session_id, session in self._sessions.items()
                 if session.created_at < cutoff and session.status == "closed"
+            ]
+            for session_id in ids_to_delete:
+                del self._sessions[session_id]
+            return len(ids_to_delete)
+
+    def cleanup_idle_older_than(self, max_idle_minutes: int) -> int:
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=max_idle_minutes)
+        with self._lock:
+            ids_to_delete = [
+                session_id
+                for session_id, session in self._sessions.items()
+                if session.last_activity_at < cutoff and session.status in {"created", "active"}
             ]
             for session_id in ids_to_delete:
                 del self._sessions[session_id]

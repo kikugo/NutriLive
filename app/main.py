@@ -56,6 +56,7 @@ def get_live_session(session_id: str) -> dict:
         "session_id": session.session_id,
         "status": session.status,
         "created_at": session.created_at.isoformat(),
+        "last_activity_at": session.last_activity_at.isoformat(),
     }
 
 
@@ -74,6 +75,7 @@ def list_live_sessions(status: str | None = None) -> dict:
                 "session_id": session.session_id,
                 "status": session.status,
                 "created_at": session.created_at.isoformat(),
+                "last_activity_at": session.last_activity_at.isoformat(),
             }
             for session in sessions
         ],
@@ -84,6 +86,12 @@ def list_live_sessions(status: str | None = None) -> dict:
 def cleanup_live_sessions(max_age_minutes: int = 60) -> dict:
     removed = session_store.cleanup_older_than(max_age_minutes=max_age_minutes)
     return {"removed": removed, "max_age_minutes": max_age_minutes}
+
+
+@app.post("/v1/live/expire-idle")
+def expire_idle_live_sessions(max_idle_minutes: int = 30) -> dict:
+    removed = session_store.cleanup_idle_older_than(max_idle_minutes=max_idle_minutes)
+    return {"removed": removed, "max_idle_minutes": max_idle_minutes}
 
 
 @app.post("/v1/nutrition/daily-stats")
@@ -121,6 +129,7 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     try:
         while True:
             payload = await websocket.receive_json()
+            session_store.touch(session_id)
             event_type = payload.get("type")
 
             if event_type == "start":
