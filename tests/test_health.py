@@ -22,3 +22,13 @@ def test_get_live_session_returns_found_after_create() -> None:
     body = response.json()
     assert body["found"] is True
     assert body["session_id"] == session_id
+
+
+def test_live_stats_returns_counts() -> None:
+    response = client.get("/v1/live/stats")
+    assert response.status_code == 200
+    body = response.json()
+    assert "total" in body
+    assert "created" in body
+    assert "active" in body
+    assert "closed" in body

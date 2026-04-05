@@ -45,5 +45,18 @@ class SessionStore:
                 del self._sessions[session_id]
             return len(ids_to_delete)
 
+    def stats(self) -> dict[str, int]:
+        with self._lock:
+            total = len(self._sessions)
+            created = sum(1 for session in self._sessions.values() if session.status == "created")
+            active = sum(1 for session in self._sessions.values() if session.status == "active")
+            closed = sum(1 for session in self._sessions.values() if session.status == "closed")
+            return {
+                "total": total,
+                "created": created,
+                "active": active,
+                "closed": closed,
+            }
+
 
 session_store = SessionStore()

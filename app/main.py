@@ -44,6 +44,11 @@ def get_live_session(session_id: str) -> dict:
     }
 
 
+@app.get("/v1/live/stats")
+def get_live_stats() -> dict:
+    return session_store.stats()
+
+
 @app.websocket("/v1/live/ws/{session_id}")
 async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     session = session_store.get(session_id)
