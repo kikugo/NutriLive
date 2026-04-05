@@ -58,5 +58,11 @@ class SessionStore:
                 "closed": closed,
             }
 
+    def list_sessions(self, status: str | None = None) -> list[LiveSession]:
+        sessions = list(self._sessions.values())
+        if not status:
+            return sessions
+        return [session for session in sessions if session.status == status]
+
 
 session_store = SessionStore()

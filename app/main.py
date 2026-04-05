@@ -62,6 +62,22 @@ def get_live_stats() -> dict:
     return session_store.stats()
 
 
+@app.get("/v1/live/sessions")
+def list_live_sessions(status: str | None = None) -> dict:
+    sessions = session_store.list_sessions(status=status)
+    return {
+        "count": len(sessions),
+        "sessions": [
+            {
+                "session_id": session.session_id,
+                "status": session.status,
+                "created_at": session.created_at.isoformat(),
+            }
+            for session in sessions
+        ],
+    }
+
+
 @app.post("/v1/live/cleanup")
 def cleanup_live_sessions(max_age_minutes: int = 60) -> dict:
     removed = session_store.cleanup_older_than(max_age_minutes=max_age_minutes)

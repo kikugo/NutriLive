@@ -51,3 +51,19 @@ def test_cleanup_endpoint_returns_removed_count() -> None:
     body = cleanup.json()
     assert "removed" in body
     assert body["max_age_minutes"] == -1
+
+
+def test_live_sessions_endpoint_returns_created_sessions() -> None:
+    client.post("/v1/live/session")
+    response = client.get("/v1/live/sessions")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] >= 1
+    assert isinstance(body["sessions"], list)
+
+
+def test_live_sessions_endpoint_supports_status_filter() -> None:
+    response = client.get("/v1/live/sessions?status=created")
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body["sessions"], list)
