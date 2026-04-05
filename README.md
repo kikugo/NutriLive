@@ -32,3 +32,14 @@ UPSTREAM_MODE=gemini
 - `WS /v1/live/ws/{session_id}`
 - `POST /v1/nutrition/daily-stats`
 - `POST /v1/nutrition/progress`
+- `GET /v1/milestone/context-retirement`
+
+## Milestone
+
+`context` can be deleted when `/v1/milestone/context-retirement` returns:
+
+- `"standalone_ui": true`
+- `"live_session_api": true`
+- `"meal_logging_api": true`
+- `"nutrition_api": true`
+- `"ready": true`
