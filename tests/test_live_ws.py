@@ -115,6 +115,17 @@ def test_ws_rejects_unsupported_event_type() -> None:
         assert error_event["code"] == "UNSUPPORTED_EVENT_TYPE"
 
 
+def test_ws_responds_to_ping_with_pong() -> None:
+    response = client.post("/v1/live/session")
+    session_id = response.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "ping"})
+        pong_event = websocket.receive_json()
+        assert pong_event["type"] == "pong"
+
+
 def test_ws_returns_init_failure_for_invalid_upstream_mode(monkeypatch) -> None:
     monkeypatch.setenv("UPSTREAM_MODE", "invalid")
     get_settings.cache_clear()

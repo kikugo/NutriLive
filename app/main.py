@@ -151,6 +151,8 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
                 break
             elif event_type == "close":
                 break
+            elif event_type == "ping":
+                await websocket.send_json({"type": "pong"})
             else:
                 await send_ws_error(
                     websocket, "UNSUPPORTED_EVENT_TYPE", f"Unsupported event type: {event_type}"
