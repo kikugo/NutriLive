@@ -12,6 +12,7 @@ from app.contracts.nutrition import Meal
 from app.schemas import AudioChunkEvent, NutritionProgressRequest, SessionCreateResponse, TextEvent
 from app.services.live_bridge import LiveBridge
 from app.services.meal_store import meal_store
+from app.services.milestone import context_retirement_status
 from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
 
@@ -135,6 +136,12 @@ def create_meal(payload: MealLogCreate) -> dict:
 def list_meals(date: str | None = None) -> list[dict]:
     items = meal_store.list_by_prefix_date(date) if date else meal_store.list_items()
     return [item.model_dump() for item in items]
+
+
+@app.get("/v1/milestone/context-retirement")
+def get_context_retirement_milestone() -> dict:
+    project_root = Path(__file__).resolve().parent.parent
+    return context_retirement_status(project_root)
 
 
 @app.websocket("/v1/live/ws/{session_id}")

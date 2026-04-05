@@ -83,3 +83,14 @@ def test_expire_idle_endpoint_returns_removed_count() -> None:
     body = response.json()
     assert "removed" in body
     assert body["max_idle_minutes"] == -1
+
+
+def test_context_retirement_milestone_endpoint() -> None:
+    response = client.get("/v1/milestone/context-retirement")
+    assert response.status_code == 200
+    body = response.json()
+    assert "standalone_ui" in body
+    assert "live_session_api" in body
+    assert "meal_logging_api" in body
+    assert "nutrition_api" in body
+    assert "ready" in body
