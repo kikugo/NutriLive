@@ -29,6 +29,10 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+async def send_ws_error(websocket: WebSocket, code: str, message: str) -> None:
+    await websocket.send_json({"type": "error", "code": code, "message": message})
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "env": settings.app_env}
@@ -69,7 +73,7 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     session = session_store.get(session_id)
     if not session:
         await websocket.accept()
-        await websocket.send_json({"type": "error", "message": "Session not found"})
+        await send_ws_error(websocket, "SESSION_NOT_FOUND", "Session not found")
         await websocket.close(code=1008)
         return
 
@@ -87,48 +91,38 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
                 try:
                     await live_bridge.handle_start(websocket)
                 except RuntimeError as exc:
-                    await websocket.send_json({"type": "error", "message": str(exc)})
+                    await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
             elif event_type == "audio_chunk":
                 try:
                     validated_payload = AudioChunkEvent.model_validate(payload).model_dump()
                 except ValidationError:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "message": "Invalid audio_chunk payload",
-                        }
-                    )
+                    await send_ws_error(websocket, "INVALID_AUDIO_CHUNK", "Invalid audio_chunk payload")
                     continue
                 try:
                     await live_bridge.handle_audio_chunk(websocket, validated_payload)
                 except RuntimeError as exc:
-                    await websocket.send_json({"type": "error", "message": str(exc)})
+                    await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
             elif event_type == "text":
                 try:
                     validated_payload = TextEvent.model_validate(payload).model_dump()
                 except ValidationError:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "message": "Invalid text payload",
-                        }
-                    )
+                    await send_ws_error(websocket, "INVALID_TEXT", "Invalid text payload")
                     continue
                 try:
                     await live_bridge.handle_text(websocket, validated_payload)
                 except RuntimeError as exc:
-                    await websocket.send_json({"type": "error", "message": str(exc)})
+                    await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
             elif event_type == "stop":
                 try:
                     await live_bridge.handle_stop(websocket)
                 except RuntimeError as exc:
-                    await websocket.send_json({"type": "error", "message": str(exc)})
+                    await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
                 break
             elif event_type == "close":
                 break
             else:
-                await websocket.send_json(
-                    {"type": "error", "message": f"Unsupported event type: {event_type}"}
+                await send_ws_error(
+                    websocket, "UNSUPPORTED_EVENT_TYPE", f"Unsupported event type: {event_type}"
                 )
     except WebSocketDisconnect:
         pass

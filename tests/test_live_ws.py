@@ -38,6 +38,7 @@ def test_ws_rejects_unknown_session() -> None:
     with client.websocket_connect("/v1/live/ws/unknown") as websocket:
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
+        assert error_event["code"] == "SESSION_NOT_FOUND"
 
 
 def test_ws_rejects_invalid_audio_chunk_payload() -> None:
@@ -49,6 +50,7 @@ def test_ws_rejects_invalid_audio_chunk_payload() -> None:
         websocket.send_json({"type": "audio_chunk", "audio": {"mime_type": "audio/pcm;rate=16000"}})
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
+        assert error_event["code"] == "INVALID_AUDIO_CHUNK"
         assert error_event["message"] == "Invalid audio_chunk payload"
 
 
@@ -61,6 +63,7 @@ def test_ws_rejects_invalid_text_payload() -> None:
         websocket.send_json({"type": "text"})
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
+        assert error_event["code"] == "INVALID_TEXT"
         assert error_event["message"] == "Invalid text payload"
 
 
@@ -78,6 +81,7 @@ def test_ws_requires_start_before_streaming() -> None:
         )
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
+        assert error_event["code"] == "UPSTREAM_ERROR"
 
 
 def test_ws_allows_separate_sessions() -> None:
@@ -96,3 +100,15 @@ def test_ws_allows_separate_sessions() -> None:
         ws2.send_json({"type": "start"})
         ready = ws2.receive_json()
         assert ready["type"] == "ready"
+
+
+def test_ws_rejects_unsupported_event_type() -> None:
+    response = client.post("/v1/live/session")
+    session_id = response.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "weird_event"})
+        error_event = websocket.receive_json()
+        assert error_event["type"] == "error"
+        assert error_event["code"] == "UNSUPPORTED_EVENT_TYPE"
