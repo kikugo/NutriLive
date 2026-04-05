@@ -1,7 +1,7 @@
 from fastapi import WebSocket
 
 from app.schemas import PrepareMealLogArgs
-from app.services.upstream import UpstreamClient
+from app.services.upstream import UpstreamClient, create_upstream_client
 
 
 class LiveBridge:
@@ -11,7 +11,7 @@ class LiveBridge:
     """
 
     def __init__(self, upstream_client: UpstreamClient | None = None) -> None:
-        self._upstream_client = upstream_client or UpstreamClient()
+        self._upstream_client = upstream_client or create_upstream_client()
 
     async def handle_start(self, websocket: WebSocket) -> None:
         await self._upstream_client.start()
@@ -79,6 +79,3 @@ class LiveBridge:
     async def handle_stop(self, websocket: WebSocket) -> None:
         await self._upstream_client.stop()
         await websocket.send_json({"type": "done", "reason": "client_stop"})
-
-
-live_bridge = LiveBridge()

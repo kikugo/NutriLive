@@ -78,3 +78,21 @@ def test_ws_requires_start_before_streaming() -> None:
         )
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
+
+
+def test_ws_allows_separate_sessions() -> None:
+    first = client.post("/v1/live/session").json()["session_id"]
+    second = client.post("/v1/live/session").json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{first}") as ws1:
+        ws1.receive_json()
+        ws1.send_json({"type": "start"})
+        ws1.receive_json()
+        ws1.send_json({"type": "stop"})
+        ws1.receive_json()
+
+    with client.websocket_connect(f"/v1/live/ws/{second}") as ws2:
+        ws2.receive_json()
+        ws2.send_json({"type": "start"})
+        ready = ws2.receive_json()
+        assert ready["type"] == "ready"

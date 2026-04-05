@@ -26,3 +26,6 @@ class UpstreamClient:
     async def stop(self) -> None:
         self._started = False
 
+
+def create_upstream_client() -> UpstreamClient:
+    return UpstreamClient()

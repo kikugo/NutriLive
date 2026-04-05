@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from app.config import get_settings
 from app.schemas import AudioChunkEvent, SessionCreateResponse, TextEvent
-from app.services.live_bridge import live_bridge
+from app.services.live_bridge import LiveBridge
 from app.services.session_store import session_store
 
 settings = get_settings()
@@ -70,6 +70,7 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
     session_store.set_status(session_id, "active")
     await websocket.send_json({"type": "ready", "session_id": session_id, "protocol_version": "v1"})
+    live_bridge = LiveBridge()
 
     try:
         while True:
