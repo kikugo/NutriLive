@@ -5,8 +5,10 @@ from pydantic import ValidationError
 from uuid import uuid4
 
 from app.config import get_settings
+from app.contracts.nutrition import Meal
 from app.schemas import AudioChunkEvent, SessionCreateResponse, TextEvent
 from app.services.live_bridge import LiveBridge
+from app.services.nutrition import calculate_daily_stats
 from app.services.session_store import session_store
 
 settings = get_settings()
@@ -82,6 +84,12 @@ def list_live_sessions(status: str | None = None) -> dict:
 def cleanup_live_sessions(max_age_minutes: int = 60) -> dict:
     removed = session_store.cleanup_older_than(max_age_minutes=max_age_minutes)
     return {"removed": removed, "max_age_minutes": max_age_minutes}
+
+
+@app.post("/v1/nutrition/daily-stats")
+def get_daily_stats(meals: list[Meal]) -> dict:
+    stats = calculate_daily_stats(meals)
+    return stats.model_dump()
 
 
 @app.websocket("/v1/live/ws/{session_id}")
