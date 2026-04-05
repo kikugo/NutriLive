@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NutriLive</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>NutriLive</h1>
+        <p>Real-time nutrition tracking with voice session controls.</p>
+      </header>
+
+      <main class="grid">
+        <section class="card">
+          <h2>Live Session</h2>
+          <div class="row">
+            <button id="create-session">Create Session</button>
+            <button id="connect-ws">Connect WS</button>
+            <button id="send-start">Start</button>
+            <button id="send-stop">Stop</button>
+          </div>
+          <div class="row">
+            <input id="chat-text" placeholder="Type command (ex: log meal chicken bowl)" />
+            <button id="send-text">Send Text</button>
+          </div>
+          <pre id="live-log" class="log"></pre>
+        </section>
+
+        <section class="card">
+          <h2>Meal Log</h2>
+          <form id="meal-form" class="form">
+            <input id="meal-name" placeholder="Meal name" required />
+            <input id="meal-calories" type="number" min="0" placeholder="Calories" required />
+            <input id="meal-protein" type="number" min="0" placeholder="Protein" required />
+            <input id="meal-carbs" type="number" min="0" placeholder="Carbs" required />
+            <input id="meal-fat" type="number" min="0" placeholder="Fat" required />
+            <input id="meal-fiber" type="number" min="0" placeholder="Fiber" required />
+            <select id="meal-type">
+              <option value="breakfast">breakfast</option>
+              <option value="lunch">lunch</option>
+              <option value="dinner">dinner</option>
+              <option value="snack">snack</option>
+            </select>
+            <button type="submit">Save Meal</button>
+          </form>
+          <button id="refresh-meals">Refresh Meals</button>
+          <pre id="meals-log" class="log"></pre>
+        </section>
+
+        <section class="card">
+          <h2>Daily Stats</h2>
+          <button id="calculate-stats">Calculate from Meals</button>
+          <pre id="stats-log" class="log"></pre>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -14,6 +14,12 @@ def test_health_endpoint() -> None:
     assert data["status"] == "ok"
 
 
+def test_root_serves_app_html() -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+
+
 def test_get_live_session_returns_found_after_create() -> None:
     created = client.post("/v1/live/session")
     session_id = created.json()["session_id"]

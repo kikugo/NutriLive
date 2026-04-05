@@ -1,17 +1,22 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 from uuid import uuid4
 
 from app.config import get_settings
+from app.contracts.meal_log import MealLogCreate
 from app.contracts.nutrition import Meal
 from app.schemas import AudioChunkEvent, NutritionProgressRequest, SessionCreateResponse, TextEvent
 from app.services.live_bridge import LiveBridge
+from app.services.meal_store import meal_store
 from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
 
 settings = get_settings()
+WEB_ROOT = Path(__file__).resolve().parent / "web"
 
 app = FastAPI(title="NutriLive Backend", version="0.1.0")
 app.add_middleware(
@@ -38,6 +43,21 @@ async def send_ws_error(websocket: WebSocket, code: str, message: str) -> None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/")
+def root() -> FileResponse:
+    return FileResponse(WEB_ROOT / "index.html")
+
+
+@app.get("/app.css")
+def web_css() -> FileResponse:
+    return FileResponse(WEB_ROOT / "app.css")
+
+
+@app.get("/app.js")
+def web_js() -> FileResponse:
+    return FileResponse(WEB_ROOT / "app.js")
 
 
 @app.post("/v1/live/session", response_model=SessionCreateResponse)
@@ -103,6 +123,18 @@ def get_daily_stats(meals: list[Meal]) -> dict:
 @app.post("/v1/nutrition/progress")
 def get_nutrition_progress(payload: NutritionProgressRequest) -> dict:
     return calculate_progress(payload.meals, payload.goals)
+
+
+@app.post("/v1/meals")
+def create_meal(payload: MealLogCreate) -> dict:
+    entry = meal_store.create(payload)
+    return entry.model_dump()
+
+
+@app.get("/v1/meals")
+def list_meals(date: str | None = None) -> list[dict]:
+    items = meal_store.list_by_prefix_date(date) if date else meal_store.list_items()
+    return [item.model_dump() for item in items]
 
 
 @app.websocket("/v1/live/ws/{session_id}")
