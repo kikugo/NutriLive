@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from app.main import app
 
 
@@ -112,3 +113,16 @@ def test_ws_rejects_unsupported_event_type() -> None:
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
         assert error_event["code"] == "UNSUPPORTED_EVENT_TYPE"
+
+
+def test_ws_returns_init_failure_for_invalid_upstream_mode(monkeypatch) -> None:
+    monkeypatch.setenv("UPSTREAM_MODE", "invalid")
+    get_settings.cache_clear()
+    response = client.post("/v1/live/session")
+    session_id = response.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        error_event = websocket.receive_json()
+        assert error_event["type"] == "error"
+        assert error_event["code"] == "UPSTREAM_INIT_FAILED"
+    get_settings.cache_clear()

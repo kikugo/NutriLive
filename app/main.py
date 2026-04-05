@@ -79,8 +79,15 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
 
     await websocket.accept()
     session_store.set_status(session_id, "active")
+    try:
+        live_bridge = LiveBridge()
+    except RuntimeError as exc:
+        await send_ws_error(websocket, "UPSTREAM_INIT_FAILED", str(exc))
+        session_store.set_status(session_id, "closed")
+        await websocket.close(code=1011)
+        return
+
     await websocket.send_json({"type": "ready", "session_id": session_id, "protocol_version": "v1"})
-    live_bridge = LiveBridge()
 
     try:
         while True:
