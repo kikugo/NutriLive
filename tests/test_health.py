@@ -33,3 +33,21 @@ def test_live_stats_returns_counts() -> None:
     assert "created" in body
     assert "active" in body
     assert "closed" in body
+
+
+def test_cleanup_endpoint_returns_removed_count() -> None:
+    created = client.post("/v1/live/session")
+    session_id = created.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "start"})
+        websocket.receive_json()
+        websocket.send_json({"type": "stop"})
+        websocket.receive_json()
+
+    cleanup = client.post("/v1/live/cleanup?max_age_minutes=-1")
+    assert cleanup.status_code == 200
+    body = cleanup.json()
+    assert "removed" in body
+    assert body["max_age_minutes"] == -1

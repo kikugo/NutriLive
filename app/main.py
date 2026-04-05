@@ -58,6 +58,12 @@ def get_live_stats() -> dict:
     return session_store.stats()
 
 
+@app.post("/v1/live/cleanup")
+def cleanup_live_sessions(max_age_minutes: int = 60) -> dict:
+    removed = session_store.cleanup_older_than(max_age_minutes=max_age_minutes)
+    return {"removed": removed, "max_age_minutes": max_age_minutes}
+
+
 @app.websocket("/v1/live/ws/{session_id}")
 async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     session = session_store.get(session_id)
