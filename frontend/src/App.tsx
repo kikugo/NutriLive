@@ -53,7 +53,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, addDays, startOfToday, isSameDay } from 'date-fns';
-import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { cn } from './lib/utils';
 import { auth, db } from './firebase';
 import { 
@@ -75,6 +74,8 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import { UserProfile, Meal, DailyStats } from './types';
+
+const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8000';
 
 // --- Constants & Types ---
 const CALORIE_GOAL = 1500;
@@ -278,12 +279,10 @@ function NutriLiveApp() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const playbackContextRef = useRef<AudioContext | null>(null);
   const nextPlaybackTimeRef = useRef<number>(0);
-  const sessionRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const startLiveSession = async () => {
-    if (!process.env.GEMINI_API_KEY) return;
-    
     setIsLiveModalOpen(true);
     setIsGeminiListening(true);
     setChatHistory([]);
@@ -295,148 +294,75 @@ function NutriLiveApp() {
     playbackContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
-      const logMealTool = {
-        name: "prepare_meal_log",
-        description: "Extracts meal details from user input to prepare for logging.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING, description: "Description of the meal" },
-            calories: { type: Type.NUMBER, description: "Estimated total calories" },
-            protein: { type: Type.NUMBER, description: "Estimated protein in grams" },
-            carbs: { type: Type.NUMBER, description: "Estimated carbs in grams" },
-            fat: { type: Type.NUMBER, description: "Estimated fat in grams" },
-            fiber: { type: Type.NUMBER, description: "Estimated fiber in grams" },
-            type: { type: Type.STRING, enum: ["breakfast", "lunch", "dinner", "snack"] }
-          },
-          required: ["name", "calories", "protein", "carbs", "fat", "type"]
+      const created = await fetch(`${BACKEND_URL}/v1/live/session`, { method: 'POST' });
+      const { session_id } = await created.json();
+      const wsScheme = BACKEND_URL.startsWith('https') ? 'wss' : 'ws';
+      const wsHost = BACKEND_URL.replace(/^https?:\/\//, '');
+      const ws = new WebSocket(`${wsScheme}://${wsHost}/v1/live/ws/${session_id}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'start' }));
+        startAudioStreaming(ws);
+      };
+
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.type === 'tool_call' && message.name === 'prepare_meal_log') {
+          setPendingMeal({
+            ...message.args,
+            timestamp: new Date().toISOString(),
+          });
+          setIsLoggingMeal(true);
+          stopLiveSession();
+          return;
+        }
+        if (message.type === 'model_transcript' && message.text) {
+          setChatHistory(prev => {
+            const newHistory = [...prev];
+            const lastMsg = newHistory[newHistory.length - 1];
+            if (lastMsg && lastMsg.role === 'model' && !lastMsg.isFinished) {
+              lastMsg.text = message.text;
+              if (message.finished) lastMsg.isFinished = true;
+            } else {
+              newHistory.push({ role: 'model', text: message.text, isFinished: message.finished });
+            }
+            return newHistory;
+          });
+        }
+        if (message.type === 'user_transcript' && message.text) {
+          setChatHistory(prev => {
+            const newHistory = [...prev];
+            const lastMsg = newHistory[newHistory.length - 1];
+            if (lastMsg && lastMsg.role === 'user' && !lastMsg.isFinished) {
+              lastMsg.text = message.text;
+              if (message.finished) lastMsg.isFinished = true;
+            } else {
+              newHistory.push({ role: 'user', text: message.text, isFinished: message.finished });
+            }
+            return newHistory;
+          });
+        }
+        if (message.type === 'model_audio_chunk' && message.audio?.data) {
+          playAudio(message.audio.data);
         }
       };
 
-      const sessionPromise = ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
-        config: {
-          responseModalities: [Modality.AUDIO],
-          systemInstruction: "You are a helpful nutrition assistant. Help the user log their meals by estimating calories and macros. When the user confirms they want to log a meal, you MUST call the 'prepare_meal_log' tool with the estimated data. Do not just say you logged it, you MUST execute the tool call.",
-          tools: [{ functionDeclarations: [logMealTool] }],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }
-          },
-          inputAudioTranscription: {},
-          outputAudioTranscription: {}
-        },
-        callbacks: {
-          onopen: () => {
-            console.log("Live session opened");
-            startAudioStreaming(sessionPromise);
-          },
-          onmessage: async (message) => {
-            // Log only important events to avoid spam
-            if (message.serverContent?.interrupted) {
-              console.log("Model interrupted");
-              audioSourcesRef.current.forEach(source => {
-                try { source.stop(); } catch (e) {}
-              });
-              audioSourcesRef.current = [];
-              if (playbackContextRef.current) {
-                nextPlaybackTimeRef.current = playbackContextRef.current.currentTime;
-              }
-            }
-            if (message.serverContent?.turnComplete) {
-              console.log("Turn complete");
-            }
-
-            // Handle tool calls (Live API sends them at the top level)
-            if (message.toolCall?.functionCalls?.length) {
-              const call = message.toolCall.functionCalls.find(c => c.name === "prepare_meal_log");
-              if (call) {
-                console.log("Tool call received:", call);
-                const args = call.args as any;
-                setPendingMeal({
-                  ...args,
-                  timestamp: new Date().toISOString()
-                });
-                setIsLoggingMeal(true);
-                stopLiveSession();
-                return;
-              }
-            }
-
-            // Handle model text output (from modelTurn)
-            if (message.serverContent?.modelTurn?.parts) {
-              const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
-              if (textPart?.text) {
-                setChatHistory(prev => {
-                  const newHistory = [...prev];
-                  const lastMsg = newHistory[newHistory.length - 1];
-                  if (lastMsg && lastMsg.role === 'model' && !lastMsg.isFinished) {
-                    lastMsg.text += textPart.text;
-                  } else {
-                    newHistory.push({ role: 'model', text: textPart.text! });
-                  }
-                  return newHistory;
-                });
-              }
-            }
-
-            // Handle model transcription (outputTranscription)
-            const outputTranscription = message.serverContent?.outputTranscription;
-            if (outputTranscription?.text) {
-              setChatHistory(prev => {
-                const newHistory = [...prev];
-                const lastMsg = newHistory[newHistory.length - 1];
-                if (lastMsg && lastMsg.role === 'model' && !lastMsg.isFinished) {
-                  lastMsg.text = outputTranscription.text!;
-                  if (outputTranscription.finished) lastMsg.isFinished = true;
-                } else {
-                  newHistory.push({ role: 'model', text: outputTranscription.text!, isFinished: outputTranscription.finished });
-                }
-                return newHistory;
-              });
-            }
-
-            // Handle user transcription
-            const inputTranscription = message.serverContent?.inputTranscription;
-            if (inputTranscription?.text) {
-              setChatHistory(prev => {
-                const newHistory = [...prev];
-                const lastMsg = newHistory[newHistory.length - 1];
-                if (lastMsg && lastMsg.role === 'user' && !lastMsg.isFinished) {
-                  // The API sends the accumulated text for the current utterance.
-                  // We just replace the text of the current message.
-                  lastMsg.text = inputTranscription.text!;
-                  if (inputTranscription.finished) lastMsg.isFinished = true;
-                } else {
-                  newHistory.push({ role: 'user', text: inputTranscription.text!, isFinished: inputTranscription.finished });
-                }
-                return newHistory;
-              });
-            }
-
-            const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (audioData) {
-              playAudio(audioData);
-            }
-          },
-          onclose: () => {
-            console.log("Live session closed");
-            stopAudioStreaming();
-          }
-        }
-      });
-
-      sessionRef.current = await sessionPromise;
+      ws.onclose = () => {
+        stopAudioStreaming();
+      };
     } catch (error) {
       console.error("Failed to connect to Gemini Live", error);
     }
   };
 
   const stopLiveSession = () => {
-    if (sessionRef.current) {
-      sessionRef.current.close();
-      sessionRef.current = null;
+    if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'stop' }));
+      }
+      wsRef.current.close();
+      wsRef.current = null;
     }
     setIsLiveModalOpen(false);
     setIsGeminiListening(false);
@@ -445,7 +371,7 @@ function NutriLiveApp() {
     audioSourcesRef.current = [];
   };
 
-  const startAudioStreaming = async (sessionPromise: Promise<any>) => {
+  const startAudioStreaming = async (ws: WebSocket) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -472,11 +398,12 @@ function NutriLiveApp() {
         }
         
         const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-        sessionPromise.then((session) => {
-          session.sendRealtimeInput({
-            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-          });
-        });
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'audio_chunk',
+            audio: { data: base64Data, mime_type: 'audio/pcm;rate=16000' }
+          }));
+        }
       };
     } catch (error) {
       console.error("Microphone access denied", error);
