@@ -1,0 +1,9 @@
+{
+  "apiKey": "replace_me",
+  "authDomain": "replace_me.firebaseapp.com",
+  "projectId": "replace_me",
+  "storageBucket": "replace_me.appspot.com",
+  "messagingSenderId": "replace_me",
+  "appId": "replace_me",
+  "firestoreDatabaseId": "replace_me"
+}
