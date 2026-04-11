@@ -59,6 +59,32 @@ class GeminiUpstreamClient(UpstreamClient):
             "response_modalities": ["AUDIO"],
             "input_audio_transcription": {},
             "output_audio_transcription": {},
+            "tools": [
+                {
+                    "function_declarations": [
+                        {
+                            "name": "prepare_meal_log",
+                            "description": "Extracts meal details from user input for meal logging.",
+                            "parameters": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "name": {"type": "STRING"},
+                                    "calories": {"type": "NUMBER"},
+                                    "protein": {"type": "NUMBER"},
+                                    "carbs": {"type": "NUMBER"},
+                                    "fat": {"type": "NUMBER"},
+                                    "fiber": {"type": "NUMBER"},
+                                    "type": {
+                                        "type": "STRING",
+                                        "enum": ["breakfast", "lunch", "dinner", "snack"],
+                                    },
+                                },
+                                "required": ["name", "calories", "protein", "carbs", "fat", "type"],
+                            },
+                        }
+                    ]
+                }
+            ],
         }
         self._session_cm = self._client.aio.live.connect(
             model=settings.gemini_live_model,
@@ -128,6 +154,19 @@ class GeminiUpstreamClient(UpstreamClient):
                                 "data": audio_b64,
                                 "mime_type": "audio/pcm;rate=24000",
                             },
+                        }
+                    )
+
+            tool_call = getattr(response, "tool_call", None)
+            function_calls = getattr(tool_call, "function_calls", []) if tool_call else []
+            for call in function_calls:
+                name = getattr(call, "name", None)
+                if name == "prepare_meal_log":
+                    await self._event_handler(
+                        {
+                            "type": "tool_call",
+                            "name": "prepare_meal_log",
+                            "args": getattr(call, "args", {}) or {},
                         }
                     )
 
