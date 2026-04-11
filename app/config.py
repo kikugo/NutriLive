@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
     upstream_mode: str = "mock"
     cors_origins: str = "http://localhost:3000"
 
