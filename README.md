@@ -1,8 +1,8 @@
 # NutriLive
 
-Python backend for real-time voice session orchestration.
+Realtime nutrition tracking app with a React frontend and Python backend.
 
-## Quick start
+## Backend quick start
 
 ```bash
 python3 -m venv .venv
@@ -20,9 +20,33 @@ UPSTREAM_MODE=mock
 UPSTREAM_MODE=gemini
 ```
 
+## Frontend quick start
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Frontend runs on `http://localhost:3000` and backend on `http://localhost:8000`.
+
+## Verify and test
+
+```bash
+# backend tests
+pytest -q
+
+# frontend checks
+cd frontend
+npm run lint
+npm run build
+npm run audit:high
+```
+
 ## API
 
 - `GET /health`
+- `GET /`
 - `POST /v1/live/session`
 - `GET /v1/live/session/{session_id}`
 - `GET /v1/live/sessions`
