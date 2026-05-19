@@ -275,6 +275,7 @@ function NutriLiveApp() {
       fiber: acc.fiber + meal.fiber
     }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
   }, [meals]);
+  const hasMealsForDay = meals.length > 0;
 
   // --- Gemini Live Logic ---
   const [isGeminiListening, setIsGeminiListening] = useState(false);
@@ -303,6 +304,9 @@ function NutriLiveApp() {
 
     try {
       const created = await fetch(`${BACKEND_URL}/v1/live/session`, { method: 'POST' });
+      if (!created.ok) {
+        throw new Error('Failed to initialize live session');
+      }
       const { session_id } = await created.json();
       const wsScheme = BACKEND_URL.startsWith('https') ? 'wss' : 'ws';
       const wsHost = BACKEND_URL.replace(/^https?:\/\//, '');
@@ -370,6 +374,10 @@ function NutriLiveApp() {
       };
 
       ws.onclose = () => {
+        if (isLiveModalOpen) {
+          setLiveError('Live session disconnected');
+          setLiveConnectionState('closed');
+        }
         setLiveConnectionState('closed');
         stopAudioStreaming();
       };
@@ -437,6 +445,8 @@ function NutriLiveApp() {
       };
     } catch (error) {
       console.error("Microphone access denied", error);
+      setLiveError('Microphone access is required for live voice logging');
+      setLiveConnectionState('error');
     }
   };
 
@@ -618,6 +628,27 @@ function NutriLiveApp() {
           <MacroCard label="Fat" value={dailyStats.fat} goal={MACRO_GOALS.fat} color="bg-black" />
           <MacroCard label="Fiber" value={dailyStats.fiber} goal={MACRO_GOALS.fiber} color="bg-green-500" />
         </div>
+
+        {!hasMealsForDay ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-8 text-center">
+            <p className="text-sm font-semibold text-gray-500">No meals logged for this day yet.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-8">
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Recent meals</p>
+            <div className="space-y-3">
+              {meals.slice(0, 4).map((meal) => (
+                <div key={meal.id || meal.timestamp} className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="font-semibold capitalize">{meal.name}</p>
+                    <p className="text-xs text-gray-400 capitalize">{meal.type}</p>
+                  </div>
+                  <p className="font-bold">{meal.calories} cal</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Bottom Navigation */}
