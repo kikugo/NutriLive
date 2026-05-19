@@ -34,6 +34,9 @@ class UpstreamClient:
     async def stop(self) -> None:
         self._started = False
 
+    def ensure_healthy(self) -> None:
+        return
+
 
 class GeminiUpstreamClient(UpstreamClient):
     def __init__(self) -> None:
@@ -43,6 +46,7 @@ class GeminiUpstreamClient(UpstreamClient):
         self._session = None
         self._receiver_task: asyncio.Task | None = None
         self._event_handler: Optional[EventHandler] = None
+        self._receive_error: Exception | None = None
 
     async def start(self, event_handler: Optional[EventHandler] = None) -> None:
         settings = get_settings()
@@ -97,7 +101,10 @@ class GeminiUpstreamClient(UpstreamClient):
     async def send_text(self, text: str) -> UpstreamResponse:
         if not self._started or self._session is None:
             raise RuntimeError("Upstream session has not started")
-        await self._session.send_client_content(turns=text, turn_complete=True)
+        await asyncio.wait_for(
+            self._session.send_client_content(turns=text, turn_complete=True),
+            timeout=15,
+        )
         return UpstreamResponse(text="", tool_call=False)
 
     async def send_audio_chunk(self, data: str, mime_type: str) -> None:
@@ -106,69 +113,75 @@ class GeminiUpstreamClient(UpstreamClient):
         from google.genai import types
 
         audio_bytes = base64.b64decode(data)
-        await self._session.send_realtime_input(
-            audio=types.Blob(data=audio_bytes, mime_type=mime_type)
+        await asyncio.wait_for(
+            self._session.send_realtime_input(
+                audio=types.Blob(data=audio_bytes, mime_type=mime_type)
+            ),
+            timeout=10,
         )
 
     async def _receive_loop(self) -> None:
         if self._session is None:
             return
-        async for response in self._session.receive():
-            if self._event_handler is None:
-                continue
+        try:
+            async for response in self._session.receive():
+                if self._event_handler is None:
+                    continue
 
-            server_content = getattr(response, "server_content", None)
-            if not server_content:
-                continue
+                server_content = getattr(response, "server_content", None)
+                if not server_content:
+                    continue
 
-            input_tx = getattr(server_content, "input_transcription", None)
-            if input_tx and getattr(input_tx, "text", None):
-                await self._event_handler(
-                    {
-                        "type": "user_transcript",
-                        "text": input_tx.text,
-                        "finished": bool(getattr(input_tx, "finished", False)),
-                    }
-                )
-
-            output_tx = getattr(server_content, "output_transcription", None)
-            if output_tx and getattr(output_tx, "text", None):
-                await self._event_handler(
-                    {
-                        "type": "model_transcript",
-                        "text": output_tx.text,
-                        "finished": bool(getattr(output_tx, "finished", False)),
-                    }
-                )
-
-            model_turn = getattr(server_content, "model_turn", None)
-            parts = getattr(model_turn, "parts", []) if model_turn else []
-            for part in parts:
-                inline_data = getattr(part, "inline_data", None)
-                if inline_data and getattr(inline_data, "data", None):
-                    audio_b64 = base64.b64encode(inline_data.data).decode("utf-8")
+                input_tx = getattr(server_content, "input_transcription", None)
+                if input_tx and getattr(input_tx, "text", None):
                     await self._event_handler(
                         {
-                            "type": "model_audio_chunk",
-                            "audio": {
-                                "data": audio_b64,
-                                "mime_type": "audio/pcm;rate=24000",
-                            },
+                            "type": "user_transcript",
+                            "text": input_tx.text,
+                            "finished": bool(getattr(input_tx, "finished", False)),
                         }
                     )
 
-            tool_call = getattr(response, "tool_call", None)
-            function_calls = getattr(tool_call, "function_calls", []) if tool_call else []
-            for call in function_calls:
-                name = getattr(call, "name", None)
-                if name == "prepare_meal_log":
+                output_tx = getattr(server_content, "output_transcription", None)
+                if output_tx and getattr(output_tx, "text", None):
                     await self._event_handler(
                         {
-                            "type": "tool_call",
-                            "name": "prepare_meal_log",
-                            "args": getattr(call, "args", {}) or {},
+                            "type": "model_transcript",
+                            "text": output_tx.text,
+                            "finished": bool(getattr(output_tx, "finished", False)),
                         }
                     )
+
+                model_turn = getattr(server_content, "model_turn", None)
+                parts = getattr(model_turn, "parts", []) if model_turn else []
+                for part in parts:
+                    inline_data = getattr(part, "inline_data", None)
+                    if inline_data and getattr(inline_data, "data", None):
+                        audio_b64 = base64.b64encode(inline_data.data).decode("utf-8")
+                        await self._event_handler(
+                            {
+                                "type": "model_audio_chunk",
+                                "audio": {
+                                    "data": audio_b64,
+                                    "mime_type": "audio/pcm;rate=24000",
+                                },
+                            }
+                        )
+
+                tool_call = getattr(response, "tool_call", None)
+                function_calls = getattr(tool_call, "function_calls", []) if tool_call else []
+                for call in function_calls:
+                    name = getattr(call, "name", None)
+                    if name == "prepare_meal_log":
+                        await self._event_handler(
+                            {
+                                "type": "tool_call",
+                                "name": "prepare_meal_log",
+                                "args": getattr(call, "args", {}) or {},
+                            }
+                        )
+        except Exception as exc:  # pragma: no cover
+            self._receive_error = exc
 
     async def stop(self) -> None:
         if self._receiver_task:
@@ -179,6 +192,10 @@ class GeminiUpstreamClient(UpstreamClient):
             self._session_cm = None
             self._session = None
         self._started = False
+
+    def ensure_healthy(self) -> None:
+        if self._receive_error:
+            raise RuntimeError("Upstream receive loop failed") from self._receive_error
 
 
 def create_upstream_client() -> UpstreamClient:

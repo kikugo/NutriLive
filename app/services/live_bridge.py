@@ -32,6 +32,7 @@ class LiveBridge:
         )
 
     async def handle_audio_chunk(self, websocket: WebSocket, payload: dict) -> None:
+        self._upstream_client.ensure_healthy()
         audio = payload.get("audio") or {}
         data = audio.get("data")
         mime_type = audio.get("mime_type", "audio/pcm;rate=16000")
@@ -52,6 +53,7 @@ class LiveBridge:
         )
 
     async def handle_text(self, websocket: WebSocket, payload: dict) -> None:
+        self._upstream_client.ensure_healthy()
         text = payload.get("text", "").strip()
         if not text:
             await self._send_json(websocket, {"type": "error", "message": "Missing text"})
@@ -89,5 +91,6 @@ class LiveBridge:
             )
 
     async def handle_stop(self, websocket: WebSocket) -> None:
+        self._upstream_client.ensure_healthy()
         await self._upstream_client.stop()
         await self._send_json(websocket, {"type": "done", "reason": "client_stop"})
