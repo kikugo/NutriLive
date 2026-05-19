@@ -1,8 +1,6 @@
-from pathlib import Path
-
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from uuid import uuid4
 
@@ -17,7 +15,6 @@ from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
 
 settings = get_settings()
-WEB_ROOT = Path(__file__).resolve().parent / "web"
 
 app = FastAPI(title="NutriLive Backend", version="0.1.0")
 app.add_middleware(
@@ -47,18 +44,11 @@ def health() -> dict:
 
 
 @app.get("/")
-def root() -> FileResponse:
-    return FileResponse(WEB_ROOT / "index.html")
-
-
-@app.get("/app.css")
-def web_css() -> FileResponse:
-    return FileResponse(WEB_ROOT / "app.css")
-
-
-@app.get("/app.js")
-def web_js() -> FileResponse:
-    return FileResponse(WEB_ROOT / "app.js")
+def root() -> dict:
+    return {
+        "service": "nutrilive-backend",
+        "frontend_url": "http://localhost:3000",
+    }
 
 
 @app.post("/v1/live/session", response_model=SessionCreateResponse)
@@ -140,6 +130,8 @@ def list_meals(date: str | None = None) -> list[dict]:
 
 @app.get("/v1/milestone/context-retirement")
 def get_context_retirement_milestone() -> dict:
+    from pathlib import Path
+
     project_root = Path(__file__).resolve().parent.parent
     return context_retirement_status(project_root)
 

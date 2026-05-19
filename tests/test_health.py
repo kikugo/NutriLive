@@ -14,10 +14,12 @@ def test_health_endpoint() -> None:
     assert data["status"] == "ok"
 
 
-def test_root_serves_app_html() -> None:
+def test_root_returns_service_metadata() -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "text/html" in response.headers["content-type"]
+    body = response.json()
+    assert body["service"] == "nutrilive-backend"
+    assert body["frontend_url"] == "http://localhost:3000"
 
 
 def test_get_live_session_returns_found_after_create() -> None:
