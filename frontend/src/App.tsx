@@ -207,6 +207,7 @@ function NutriLiveApp() {
   const [isLiveModalOpen, setIsLiveModalOpen] = useState(false);
   const [isLoggingMeal, setIsLoggingMeal] = useState(false);
   const [pendingMeal, setPendingMeal] = useState<Partial<Meal> | null>(null);
+  const [isSavingMeal, setIsSavingMeal] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   // --- Firebase Logic ---
@@ -488,14 +489,21 @@ function NutriLiveApp() {
   };
 
   const saveMeal = async () => {
-    if (!user || !pendingMeal) return;
+    if (!user || !pendingMeal || isSavingMeal) return;
+    setIsSavingMeal(true);
     try {
       await addDoc(collection(db, 'users', user.uid, 'meals'), pendingMeal);
       setIsLoggingMeal(false);
       setPendingMeal(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/meals`);
+    } finally {
+      setIsSavingMeal(false);
     }
+  };
+
+  const updatePendingMeal = (field: keyof Meal, value: string | number) => {
+    setPendingMeal(prev => ({ ...(prev || {}), [field]: value }));
   };
 
   // --- UI Render ---
@@ -727,6 +735,59 @@ function NutriLiveApp() {
                 </div>
 
                 <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      value={pendingMeal.name || ''}
+                      onChange={(e) => updatePendingMeal('name', e.target.value)}
+                      className="col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                      placeholder="Meal name"
+                    />
+                    <input
+                      type="number"
+                      value={pendingMeal.calories ?? 0}
+                      onChange={(e) => updatePendingMeal('calories', Number(e.target.value))}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                      placeholder="Calories"
+                    />
+                    <input
+                      type="number"
+                      value={pendingMeal.protein ?? 0}
+                      onChange={(e) => updatePendingMeal('protein', Number(e.target.value))}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                      placeholder="Protein"
+                    />
+                    <input
+                      type="number"
+                      value={pendingMeal.carbs ?? 0}
+                      onChange={(e) => updatePendingMeal('carbs', Number(e.target.value))}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                      placeholder="Carbs"
+                    />
+                    <input
+                      type="number"
+                      value={pendingMeal.fat ?? 0}
+                      onChange={(e) => updatePendingMeal('fat', Number(e.target.value))}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                      placeholder="Fat"
+                    />
+                    <input
+                      type="number"
+                      value={pendingMeal.fiber ?? 0}
+                      onChange={(e) => updatePendingMeal('fiber', Number(e.target.value))}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                      placeholder="Fiber"
+                    />
+                    <select
+                      value={pendingMeal.type || 'lunch'}
+                      onChange={(e) => updatePendingMeal('type', e.target.value as Meal['type'])}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                    >
+                      <option value="breakfast">Breakfast</option>
+                      <option value="lunch">Lunch</option>
+                      <option value="dinner">Dinner</option>
+                      <option value="snack">Snack</option>
+                    </select>
+                  </div>
                   <div className="flex justify-between items-center py-2 border-b border-gray-50">
                     <span className="text-sm font-medium text-gray-500 capitalize">{pendingMeal.name}</span>
                     <div className="text-right">
@@ -752,10 +813,11 @@ function NutriLiveApp() {
                   </button>
                   <button 
                     onClick={saveMeal}
-                    className="flex-[2] bg-black text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
+                    disabled={isSavingMeal}
+                    className="flex-[2] bg-black text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Check className="w-5 h-5" />
-                    Log Meal
+                    {isSavingMeal ? 'Saving...' : 'Log Meal'}
                   </button>
                 </div>
               </div>
