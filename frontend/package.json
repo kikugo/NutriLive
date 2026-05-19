@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "audit:high": "npm audit --audit-level=high",
+    "install:ci": "npm ci",
+    "install:ci:safe": "npm ci --ignore-scripts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
