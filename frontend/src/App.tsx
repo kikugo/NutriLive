@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, useMemo, ErrorInfo, ReactNode } from 'react';
 
 // --- Error Boundary ---
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: any }> {
+class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean, error: any }> {
+  state: { hasError: boolean; error: any };
+
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -32,7 +34,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
         </div>
       );
     }
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 
@@ -276,16 +278,21 @@ function NutriLiveApp() {
   // --- Gemini Live Logic ---
   const [isGeminiListening, setIsGeminiListening] = useState(false);
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'model', text: string, isFinished?: boolean }[]>([]);
+  const [liveConnectionState, setLiveConnectionState] = useState<'idle' | 'connecting' | 'streaming' | 'model-speaking' | 'error' | 'closed'>('idle');
+  const [liveError, setLiveError] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const playbackContextRef = useRef<AudioContext | null>(null);
   const nextPlaybackTimeRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const speakingTimerRef = useRef<number | null>(null);
 
   const startLiveSession = async () => {
     setIsLiveModalOpen(true);
     setIsGeminiListening(true);
     setChatHistory([]);
+    setLiveConnectionState('connecting');
+    setLiveError(null);
     nextPlaybackTimeRef.current = 0;
     audioSourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
     audioSourcesRef.current = [];
@@ -302,12 +309,18 @@ function NutriLiveApp() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        setLiveConnectionState('streaming');
         ws.send(JSON.stringify({ type: 'start' }));
         startAudioStreaming(ws);
       };
 
       ws.onmessage = (event) => {
         const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          setLiveError(message.message || 'Live stream error');
+          setLiveConnectionState('error');
+          return;
+        }
         if (message.type === 'tool_call' && message.name === 'prepare_meal_log') {
           setPendingMeal({
             ...message.args,
@@ -345,14 +358,24 @@ function NutriLiveApp() {
         }
         if (message.type === 'model_audio_chunk' && message.audio?.data) {
           playAudio(message.audio.data);
+          setLiveConnectionState('model-speaking');
+          if (speakingTimerRef.current !== null) {
+            window.clearTimeout(speakingTimerRef.current);
+          }
+          speakingTimerRef.current = window.setTimeout(() => {
+            setLiveConnectionState('streaming');
+          }, 700);
         }
       };
 
       ws.onclose = () => {
+        setLiveConnectionState('closed');
         stopAudioStreaming();
       };
     } catch (error) {
       console.error("Failed to connect to Gemini Live", error);
+      setLiveError('Failed to connect to live session');
+      setLiveConnectionState('error');
     }
   };
 
@@ -366,6 +389,12 @@ function NutriLiveApp() {
     }
     setIsLiveModalOpen(false);
     setIsGeminiListening(false);
+    setLiveConnectionState('idle');
+    setLiveError(null);
+    if (speakingTimerRef.current !== null) {
+      window.clearTimeout(speakingTimerRef.current);
+      speakingTimerRef.current = null;
+    }
     stopAudioStreaming();
     audioSourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
     audioSourcesRef.current = [];
@@ -628,13 +657,21 @@ function NutriLiveApp() {
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                  {isGeminiListening ? "Gemini Speaking..." : "Listening..."}
+                  {liveConnectionState === 'connecting' && 'Connecting...'}
+                  {liveConnectionState === 'streaming' && 'Listening...'}
+                  {liveConnectionState === 'model-speaking' && 'Gemini Speaking...'}
+                  {liveConnectionState === 'error' && 'Connection Error'}
+                  {liveConnectionState === 'closed' && 'Session Closed'}
+                  {liveConnectionState === 'idle' && 'Ready'}
                 </span>
               </div>
               <button onClick={stopLiveSession} className="p-2 hover:bg-gray-100 rounded-full">
                 <X className="w-6 h-6" />
               </button>
             </div>
+            {liveError && (
+              <div className="px-6 pt-4 text-sm font-medium text-red-500">{liveError}</div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 no-scrollbar">
               {chatHistory.length === 0 && (
