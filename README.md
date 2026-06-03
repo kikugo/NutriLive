@@ -1,13 +1,15 @@
 # NutriLive
 
-Realtime nutrition tracking app with a React frontend and Python backend.
+Voice-first nutrition logging. React frontend, FastAPI backend, Gemini Live for
+the voice path.
 
 ## Backend quick start
 
+Use Python 3.12 — the dependencies don't have working wheels on 3.14 yet.
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
+uv venv --python 3.12 --seed
+uv pip install -e ".[dev]"
 cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
@@ -34,7 +36,7 @@ Frontend runs on `http://localhost:3000` and backend on `http://localhost:8000`.
 
 ```bash
 # backend tests
-pytest -q
+.venv/bin/python -m pytest -q
 
 # frontend checks
 cd frontend
@@ -56,14 +58,13 @@ npm run audit:high
 - `WS /v1/live/ws/{session_id}`
 - `POST /v1/nutrition/daily-stats`
 - `POST /v1/nutrition/progress`
+- `POST /v1/meals`
+- `GET /v1/meals`
 - `GET /v1/milestone/context-retirement`
 
-## Milestone
+## Status
 
-`context` can be deleted when `/v1/milestone/context-retirement` returns:
-
-- `"standalone_ui": true`
-- `"live_session_api": true`
-- `"meal_logging_api": true`
-- `"nutrition_api": true`
-- `"ready": true`
+See `STATUS.md` for what's built versus what's still open. Short version: the
+voice bridge and APIs work, but meals and sessions are in-memory (no persistence
+yet), there's no auth, and macro numbers are estimates rather than looked up from
+a nutrition database.
