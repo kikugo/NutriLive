@@ -9,12 +9,11 @@
 ## TL;DR
 
 A voice-first nutrition logging app. The **infrastructure is real and tested**
-(Gemini Live voice bridge, FastAPI backend, React frontend, CI). It is **not yet
-a product**: logged data does not persist, there is no auth, and macro numbers
-are estimates, not database-backed. The three product-critical gaps from the old
-plan are all still open.
+(Gemini Live voice bridge, FastAPI backend, React frontend, CI). Meals and
+sessions now **persist to SQLite**. It is **not yet a product**: there is no
+auth, and macro numbers are estimates rather than database-backed.
 
-- Backend: `app/` — FastAPI. **31 tests passing.**
+- Backend: `app/` — FastAPI. **32 tests passing.**
 - Frontend: `frontend/` — React + Vite + TypeScript.
 - Both status docs were local/untracked. This file is too unless staged.
 
@@ -37,7 +36,8 @@ cd frontend && npm ci && npm run dev  # frontend on :3000
 ```
 
 Env vars (local `.env`, gitignored): `GEMINI_API_KEY`, `GEMINI_MODEL`,
-`APP_ENV`, `UPSTREAM_MODE` (`mock` | `gemini`), `CORS_ORIGINS`.
+`APP_ENV`, `UPSTREAM_MODE` (`mock` | `gemini`), `CORS_ORIGINS`,
+`DATABASE_PATH` (SQLite file, defaults to `nutrilive.db`).
 Frontend Firebase config expected at `frontend/firebase-config.json` (gitignored;
 example in `frontend/firebase-config.example.json`).
 
@@ -54,10 +54,11 @@ app/
   services/
     upstream.py           UpstreamClient (mock) + GeminiUpstreamClient (real Live)
     live_bridge.py        maps client/upstream events <-> websocket frames
-    meal_store.py         IN-MEMORY dict+Lock  (does not survive restart)
-    session_store.py      IN-MEMORY dict+Lock  (does not survive restart)
+    meal_store.py         SQLite-backed (survives restart)
+    session_store.py      SQLite-backed (survives restart)
     nutrition.py          pure macro math (totals, progress vs goals)
     milestone.py
+  db.py                   SQLite connection helper + schema
   web/                    legacy minimal HTML/JS UI (superseded by frontend/)
 
 frontend/                 React + Vite + TS — canonical user-facing app
@@ -109,16 +110,11 @@ frontend/                 React + Vite + TS — canonical user-facing app
   Gemini-does-the-parsing, so a full Nutritionix integration may be unnecessary;
   the open question is purely about *accuracy*.
 
-### 2. No persistence — THE #1 blocker
-- `meal_store.py` and `session_store.py` are in-memory `dict + Lock`.
-- Everything a user logs is lost on restart. No DB.
-- Wiring a nutrition API or auth onto this is premature until it's fixed.
-
-### 3. No auth / per-user isolation
+### 2. No auth / per-user isolation
 - No `get_current_user`, no JWT verification, no row-level security.
 - Every meal/session route is open; data is global, not per-user.
 
-### 4. Tech debt
+### 3. Tech debt
 - WebSocket payloads validated *after* receive, not via a strict schema first.
 - LiveBridge error handling is generic — upstream failures can look like parse
   errors.
@@ -143,16 +139,17 @@ a nutrition API adds today is **macro accuracy**.
 
 Recommendation: if accuracy matters, add **USDA as a verification layer** (Gemini
 parses the food, USDA supplies real macros) — free and reuses Gemini's strength.
-But this is lower priority than persistence + auth.
+But this is lower priority than auth.
 
 ---
 
 ## Recommended Order
 
-1. **Persistence** — SQLite or Postgres-backed repos replacing the in-memory
-   stores; keep route signatures stable. (Unblocks everything else.)
+1. ~~**Persistence**~~ — done. Meals and sessions are SQLite-backed (`app/db.py`,
+   path via `DATABASE_PATH`); route signatures unchanged. Next: when a user model
+   exists, scope meals/sessions to `user_id`.
 2. **Auth + per-user isolation** — pick one provider, add a `get_current_user`
-   dependency to meal/session routes.
+   dependency to meal/session routes. (Now the top open gap.)
 3. **Nutrition accuracy** — resolve the decision above (likely USDA layer).
 4. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
 
