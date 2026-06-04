@@ -10,10 +10,11 @@
 
 A voice-first nutrition logging app. The **infrastructure is real and tested**
 (Gemini Live voice bridge, FastAPI backend, React frontend, CI). Meals and
-sessions now **persist to SQLite**. It is **not yet a product**: there is no
-auth, and macro numbers are estimates rather than database-backed.
+sessions **persist to SQLite** and are **scoped per user** behind Firebase ID
+token auth. The remaining product gap: macro numbers are estimates rather than
+looked up from a nutrition database.
 
-- Backend: `app/` — FastAPI. **32 tests passing.**
+- Backend: `app/` — FastAPI. **33 tests passing.**
 - Frontend: `frontend/` — React + Vite + TypeScript.
 - Both status docs were local/untracked. This file is too unless staged.
 
@@ -37,7 +38,9 @@ cd frontend && npm ci && npm run dev  # frontend on :3000
 
 Env vars (local `.env`, gitignored): `GEMINI_API_KEY`, `GEMINI_MODEL`,
 `APP_ENV`, `UPSTREAM_MODE` (`mock` | `gemini`), `CORS_ORIGINS`,
-`DATABASE_PATH` (SQLite file, defaults to `nutrilive.db`).
+`DATABASE_PATH` (SQLite file, defaults to `nutrilive.db`),
+`AUTH_MODE` (`disabled` | `firebase`), `FIREBASE_PROJECT_ID` (required when
+`AUTH_MODE=firebase`).
 Frontend Firebase config expected at `frontend/firebase-config.json` (gitignored;
 example in `frontend/firebase-config.example.json`).
 
@@ -54,10 +57,11 @@ app/
   services/
     upstream.py           UpstreamClient (mock) + GeminiUpstreamClient (real Live)
     live_bridge.py        maps client/upstream events <-> websocket frames
-    meal_store.py         SQLite-backed (survives restart)
-    session_store.py      SQLite-backed (survives restart)
+    meal_store.py         SQLite-backed, scoped by user_id
+    session_store.py      SQLite-backed, scoped by user_id
     nutrition.py          pure macro math (totals, progress vs goals)
     milestone.py
+  auth.py                 get_current_user dependency (Firebase ID token verify)
   db.py                   SQLite connection helper + schema
   web/                    legacy minimal HTML/JS UI (superseded by frontend/)
 
@@ -76,19 +80,26 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - **WebSocket flow** `WS /v1/live/ws/{session_id}` with the event families
   documented below; frontend maps these into live voice state.
 - **REST endpoints** all present in `app/main.py` (see below).
+- **Persistence**: meals and sessions in SQLite, scoped per `user_id`, survive
+  restart.
+- **Auth**: `app/auth.py` verifies Firebase ID tokens against Google's public
+  keys (`AUTH_MODE=firebase`). `AUTH_MODE=disabled` runs as a dev user for local
+  dev and tests. Meal/session routes require auth and isolate data by user.
 - **Frontend**: live voice modal, transcript updates, audio playback queue,
   meal-confirm modal with edit-before-save, dashboard empty/error states.
 - **Security/ops**: `frontend/.npmrc` (save-exact), CI (`.github/workflows/ci.yml`),
   dependabot (`.github/dependabot.yml`). The 5 pruned frontend deps are gone.
-- **Tests**: 9 files, 31 tests, all green.
+- **Tests**: 10 files, 33 tests, all green.
 
 ### Endpoints
+(`A` = requires auth in `firebase` mode and is scoped to the caller's user)
 - `GET /health`, `GET /`
-- `POST /v1/live/session`, `WS /v1/live/ws/{session_id}`
-- `GET /v1/live/session/{id}`, `GET /v1/live/sessions`, `GET /v1/live/stats`,
-  `POST /v1/live/cleanup`, `POST /v1/live/expire-idle`
-- `POST /v1/nutrition/daily-stats`, `POST /v1/nutrition/progress`
-- `POST /v1/meals`, `GET /v1/meals`
+- `POST /v1/live/session` `A`, `WS /v1/live/ws/{session_id}`
+- `GET /v1/live/session/{id}` `A`, `GET /v1/live/sessions` `A`,
+  `GET /v1/live/stats` `A`, `POST /v1/live/cleanup` `A`,
+  `POST /v1/live/expire-idle` `A`
+- `POST /v1/nutrition/daily-stats`, `POST /v1/nutrition/progress` (stateless math)
+- `POST /v1/meals` `A`, `GET /v1/meals` `A`
 - `GET /v1/milestone/context-retirement`
 
 ### WebSocket events
@@ -110,11 +121,7 @@ frontend/                 React + Vite + TS — canonical user-facing app
   Gemini-does-the-parsing, so a full Nutritionix integration may be unnecessary;
   the open question is purely about *accuracy*.
 
-### 2. No auth / per-user isolation
-- No `get_current_user`, no JWT verification, no row-level security.
-- Every meal/session route is open; data is global, not per-user.
-
-### 3. Tech debt
+### 2. Tech debt
 - WebSocket payloads validated *after* receive, not via a strict schema first.
 - LiveBridge error handling is generic — upstream failures can look like parse
   errors.
@@ -139,18 +146,20 @@ a nutrition API adds today is **macro accuracy**.
 
 Recommendation: if accuracy matters, add **USDA as a verification layer** (Gemini
 parses the food, USDA supplies real macros) — free and reuses Gemini's strength.
-But this is lower priority than auth.
+This is now the top open product gap.
 
 ---
 
 ## Recommended Order
 
-1. ~~**Persistence**~~ — done. Meals and sessions are SQLite-backed (`app/db.py`,
-   path via `DATABASE_PATH`); route signatures unchanged. Next: when a user model
-   exists, scope meals/sessions to `user_id`.
-2. **Auth + per-user isolation** — pick one provider, add a `get_current_user`
-   dependency to meal/session routes. (Now the top open gap.)
+1. ~~**Persistence**~~ — done. Meals and sessions are SQLite-backed
+   (`app/db.py`, path via `DATABASE_PATH`); route signatures unchanged.
+2. ~~**Auth + per-user isolation**~~ — done. Firebase ID token verification in
+   `app/auth.py`; meal/session data scoped by `user_id`. To turn it on, set
+   `AUTH_MODE=firebase` and `FIREBASE_PROJECT_ID`. Next step when needed: WS-path
+   auth (currently the session id is the capability) and a persisted user record.
 3. **Nutrition accuracy** — resolve the decision above (likely USDA layer).
+   Now the top open gap.
 4. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
 
 ---

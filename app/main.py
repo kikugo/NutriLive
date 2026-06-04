@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from uuid import uuid4
 
+from app.auth import AuthUser, get_current_user
 from app.config import get_settings
 from app.contracts.meal_log import MealLogCreate
 from app.contracts.nutrition import Meal
@@ -52,15 +53,15 @@ def root() -> dict:
 
 
 @app.post("/v1/live/session", response_model=SessionCreateResponse)
-def create_live_session() -> SessionCreateResponse:
-    session = session_store.create()
+def create_live_session(user: AuthUser = Depends(get_current_user)) -> SessionCreateResponse:
+    session = session_store.create(user.uid)
     return SessionCreateResponse(session_id=session.session_id)
 
 
 @app.get("/v1/live/session/{session_id}")
-def get_live_session(session_id: str) -> dict:
+def get_live_session(session_id: str, user: AuthUser = Depends(get_current_user)) -> dict:
     session = session_store.get(session_id)
-    if not session:
+    if not session or session.user_id != user.uid:
         return {"found": False}
     return {
         "found": True,
@@ -72,13 +73,15 @@ def get_live_session(session_id: str) -> dict:
 
 
 @app.get("/v1/live/stats")
-def get_live_stats() -> dict:
-    return session_store.stats()
+def get_live_stats(user: AuthUser = Depends(get_current_user)) -> dict:
+    return session_store.stats(user.uid)
 
 
 @app.get("/v1/live/sessions")
-def list_live_sessions(status: str | None = None) -> dict:
-    sessions = session_store.list_sessions(status=status)
+def list_live_sessions(
+    status: str | None = None, user: AuthUser = Depends(get_current_user)
+) -> dict:
+    sessions = session_store.list_sessions(user.uid, status=status)
     return {
         "count": len(sessions),
         "sessions": [
@@ -94,14 +97,18 @@ def list_live_sessions(status: str | None = None) -> dict:
 
 
 @app.post("/v1/live/cleanup")
-def cleanup_live_sessions(max_age_minutes: int = 60) -> dict:
-    removed = session_store.cleanup_older_than(max_age_minutes=max_age_minutes)
+def cleanup_live_sessions(
+    max_age_minutes: int = 60, user: AuthUser = Depends(get_current_user)
+) -> dict:
+    removed = session_store.cleanup_older_than(user.uid, max_age_minutes=max_age_minutes)
     return {"removed": removed, "max_age_minutes": max_age_minutes}
 
 
 @app.post("/v1/live/expire-idle")
-def expire_idle_live_sessions(max_idle_minutes: int = 30) -> dict:
-    removed = session_store.cleanup_idle_older_than(max_idle_minutes=max_idle_minutes)
+def expire_idle_live_sessions(
+    max_idle_minutes: int = 30, user: AuthUser = Depends(get_current_user)
+) -> dict:
+    removed = session_store.cleanup_idle_older_than(user.uid, max_idle_minutes=max_idle_minutes)
     return {"removed": removed, "max_idle_minutes": max_idle_minutes}
 
 
@@ -117,14 +124,20 @@ def get_nutrition_progress(payload: NutritionProgressRequest) -> dict:
 
 
 @app.post("/v1/meals")
-def create_meal(payload: MealLogCreate) -> dict:
-    entry = meal_store.create(payload)
+def create_meal(payload: MealLogCreate, user: AuthUser = Depends(get_current_user)) -> dict:
+    entry = meal_store.create(user.uid, payload)
     return entry.model_dump()
 
 
 @app.get("/v1/meals")
-def list_meals(date: str | None = None) -> list[dict]:
-    items = meal_store.list_by_prefix_date(date) if date else meal_store.list_items()
+def list_meals(
+    date: str | None = None, user: AuthUser = Depends(get_current_user)
+) -> list[dict]:
+    items = (
+        meal_store.list_by_prefix_date(user.uid, date)
+        if date
+        else meal_store.list_items(user.uid)
+    )
     return [item.model_dump() for item in items]
 
 

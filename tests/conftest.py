@@ -13,6 +13,7 @@ from app.config import get_settings
 @pytest.fixture(autouse=True)
 def default_test_runtime(monkeypatch, tmp_path):
     monkeypatch.setenv("UPSTREAM_MODE", "mock")
+    monkeypatch.setenv("AUTH_MODE", "disabled")
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "test.db"))
     get_settings.cache_clear()
     yield

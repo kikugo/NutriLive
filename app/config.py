@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     upstream_mode: str = "mock"
     cors_origins: str = "http://localhost:3000"
     database_path: str = "nutrilive.db"
+    auth_mode: str = "disabled"
+    firebase_project_id: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

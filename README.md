@@ -65,6 +65,7 @@ npm run audit:high
 ## Status
 
 See `STATUS.md` for what's built versus what's still open. Short version: the
-voice bridge and APIs work, but meals and sessions are in-memory (no persistence
-yet), there's no auth, and macro numbers are estimates rather than looked up from
-a nutrition database.
+voice bridge and APIs work; meals and sessions persist to SQLite and are scoped
+per user behind Firebase ID token auth (`AUTH_MODE=firebase`). The remaining gap
+is macro accuracy — numbers are estimates rather than looked up from a nutrition
+database. Local dev and tests run with `AUTH_MODE=disabled` (a fixed dev user).
