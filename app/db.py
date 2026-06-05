@@ -5,19 +5,6 @@ from typing import Iterator
 from app.config import get_settings
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS meals (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
-    name TEXT NOT NULL,
-    calories INTEGER NOT NULL,
-    protein INTEGER NOT NULL,
-    carbs INTEGER NOT NULL,
-    fat INTEGER NOT NULL,
-    fiber INTEGER NOT NULL,
-    timestamp TEXT NOT NULL,
-    type TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL DEFAULT '',
@@ -37,12 +24,9 @@ def resolve_path(db_path: str | None) -> str:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """Add columns missing from databases created by older schema versions."""
-    for table in ("meals", "sessions"):
-        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
-        if "user_id" not in columns:
-            conn.execute(
-                f"ALTER TABLE {table} ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"
-            )
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+    if "user_id" not in columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''")
 
 
 @contextmanager

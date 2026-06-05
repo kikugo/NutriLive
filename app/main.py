@@ -6,11 +6,9 @@ from uuid import uuid4
 
 from app.auth import AuthUser, get_current_user
 from app.config import get_settings
-from app.contracts.meal_log import MealLogCreate
 from app.contracts.nutrition import Meal
 from app.schemas import AudioChunkEvent, NutritionProgressRequest, SessionCreateResponse, TextEvent
 from app.services.live_bridge import LiveBridge
-from app.services.meal_store import meal_store
 from app.services.milestone import context_retirement_status
 from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
@@ -121,24 +119,6 @@ def get_daily_stats(meals: list[Meal]) -> dict:
 @app.post("/v1/nutrition/progress")
 def get_nutrition_progress(payload: NutritionProgressRequest) -> dict:
     return calculate_progress(payload.meals, payload.goals)
-
-
-@app.post("/v1/meals")
-def create_meal(payload: MealLogCreate, user: AuthUser = Depends(get_current_user)) -> dict:
-    entry = meal_store.create(user.uid, payload)
-    return entry.model_dump()
-
-
-@app.get("/v1/meals")
-def list_meals(
-    date: str | None = None, user: AuthUser = Depends(get_current_user)
-) -> list[dict]:
-    items = (
-        meal_store.list_by_prefix_date(user.uid, date)
-        if date
-        else meal_store.list_items(user.uid)
-    )
-    return [item.model_dump() for item in items]
 
 
 @app.get("/v1/milestone/context-retirement")

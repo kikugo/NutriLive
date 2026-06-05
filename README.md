@@ -58,15 +58,16 @@ npm run audit:high
 - `WS /v1/live/ws/{session_id}`
 - `POST /v1/nutrition/daily-stats`
 - `POST /v1/nutrition/progress`
-- `POST /v1/meals`
-- `GET /v1/meals`
 - `GET /v1/milestone/context-retirement`
+
+Meals are stored in Firestore by the frontend (`users/{uid}/meals`), not via a
+backend endpoint.
 
 ## Status
 
 See `STATUS.md` for what's built versus what's still open. Short version: the
-voice bridge and APIs work; meals and sessions persist to SQLite and are scoped
-per user behind Firebase ID token auth (`AUTH_MODE=firebase`). Macros can be
-verified against USDA FoodData Central (`NUTRITION_LOOKUP_MODE=usda`) instead of
+voice bridge and APIs work; meals live in Firestore while sessions persist to
+SQLite scoped per user behind Firebase ID token auth (`AUTH_MODE=firebase`).
+Macros can be verified against USDA FoodData Central (`NUTRITION_LOOKUP_MODE=usda`) instead of
 trusting the model's estimate. Local dev and tests run with `AUTH_MODE=disabled`
 (a fixed dev user) and lookup off.

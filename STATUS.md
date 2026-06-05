@@ -28,7 +28,7 @@ do not use it).
 ```bash
 uv venv --python 3.12 --seed          # create .venv
 uv pip install -e ".[dev]"            # runtime + dev deps (pytest, httpx)
-.venv/bin/python -m pytest -q         # 31 passing
+.venv/bin/python -m pytest -q         # 39 passing
 uvicorn app.main:app --reload         # backend on :8000
 ```
 
@@ -54,11 +54,10 @@ app/
   main.py                 FastAPI app, routes, request-id middleware, WS handler
   config.py               settings (pydantic-settings)
   schemas.py
-  contracts/              meal_log, nutrition pydantic models
+  contracts/              nutrition pydantic models
   services/
     upstream.py           UpstreamClient (mock) + GeminiUpstreamClient (real Live)
     live_bridge.py        maps client/upstream events <-> websocket frames
-    meal_store.py         SQLite-backed, scoped by user_id
     session_store.py      SQLite-backed, scoped by user_id
     nutrition.py          pure macro math (totals, progress vs goals)
     nutrition_lookup.py   USDA FoodData Central lookup (off | usda)
@@ -87,16 +86,20 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - **WebSocket flow** `WS /v1/live/ws/{session_id}` with the event families
   documented below; frontend maps these into live voice state.
 - **REST endpoints** all present in `app/main.py` (see below).
-- **Persistence**: meals and sessions in SQLite, scoped per `user_id`, survive
+- **Meal storage**: meals live in **Firestore** (`users/{uid}/meals`), written by
+  the frontend with real-time sync. Macros are USDA-verified in-flight (in the
+  live bridge) before the frontend saves them.
+- **Session persistence**: sessions in SQLite, scoped per `user_id`, survive
   restart.
 - **Auth**: `app/auth.py` verifies Firebase ID tokens against Google's public
   keys (`AUTH_MODE=firebase`). `AUTH_MODE=disabled` runs as a dev user for local
-  dev and tests. Meal/session routes require auth and isolate data by user.
+  dev and tests. Session routes require auth and isolate data by user.
 - **Frontend**: live voice modal, transcript updates, audio playback queue,
-  meal-confirm modal with edit-before-save, dashboard empty/error states.
+  meal-confirm modal with edit-before-save and a USDA-verified/estimated badge,
+  dashboard empty/error states.
 - **Security/ops**: `frontend/.npmrc` (save-exact), CI (`.github/workflows/ci.yml`),
   dependabot (`.github/dependabot.yml`). The 5 pruned frontend deps are gone.
-- **Tests**: 10 files, 33 tests, all green.
+- **Tests**: 9 files, 39 tests, all green.
 
 ### Endpoints
 (`A` = requires auth in `firebase` mode and is scoped to the caller's user)
@@ -106,8 +109,8 @@ frontend/                 React + Vite + TS — canonical user-facing app
   `GET /v1/live/stats` `A`, `POST /v1/live/cleanup` `A`,
   `POST /v1/live/expire-idle` `A`
 - `POST /v1/nutrition/daily-stats`, `POST /v1/nutrition/progress` (stateless math)
-- `POST /v1/meals` `A`, `GET /v1/meals` `A`
 - `GET /v1/milestone/context-retirement`
+- Meals are not a backend endpoint — the frontend reads/writes Firestore directly.
 
 ### WebSocket events
 - Inbound to backend: `start`, `audio_chunk`, `text`, `stop`, `close`, `ping`
@@ -135,25 +138,31 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - No rate limiting (`slowapi` or middleware).
 - Frontend Vite build warns on a >500 kB chunk (no code-splitting yet).
 - No frontend e2e/smoke tests for the voice + meal flow.
-- Frontend stores meals in **Firestore directly**, not via the backend
-  `/v1/meals` store — two sources of truth to reconcile eventually.
+- `app/web/` legacy UI and the `/v1/milestone/context-retirement` endpoint are
+  vestigial (the `app/web/app.js` still calls the now-removed `/v1/meals`). Safe
+  to delete in a follow-up.
+- Meals only live in Firestore — the backend can't read meal history server-side
+  (needed later for coach mode / weekly trends) until `firebase-admin` is added.
 
 ---
 
 ## Recommended Order
 
-1. ~~**Persistence**~~ — done. Meals and sessions are SQLite-backed
-   (`app/db.py`, path via `DATABASE_PATH`); route signatures unchanged.
+1. ~~**Persistence**~~ — done. Sessions are SQLite-backed (`app/db.py`, path via
+   `DATABASE_PATH`). Meals live in Firestore (see below).
 2. ~~**Auth + per-user isolation**~~ — done. Firebase ID token verification in
-   `app/auth.py`; meal/session data scoped by `user_id`. To turn it on, set
+   `app/auth.py`; session data scoped by `user_id`. To turn it on, set
    `AUTH_MODE=firebase` and `FIREBASE_PROJECT_ID`. Next step when needed: WS-path
    auth (currently the session id is the capability) and a persisted user record.
 3. ~~**Nutrition accuracy**~~ — done (opt-in). USDA verification layer in
    `app/services/nutrition_lookup.py`; enable with `NUTRITION_LOOKUP_MODE=usda`.
-   The confirm modal now shows a "USDA verified" / "Estimated" badge so users
-   know which numbers are database-backed. Possible follow-ups: food
-   disambiguation, reconcile Firestore vs backend meal storage.
-4. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
+   The confirm modal shows a "USDA verified" / "Estimated" badge. Possible
+   follow-up: food disambiguation.
+4. ~~**Reconcile meal storage**~~ — done. Firestore is the single source of truth
+   for meals; the unused backend SQLite meal store and `/v1/meals` endpoints were
+   removed.
+5. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests,
+   delete the vestigial `app/web/` UI + milestone endpoint.
 
 ---
 
