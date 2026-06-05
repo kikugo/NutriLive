@@ -33,6 +33,7 @@ class PrepareMealLogArgs(BaseModel):
     fat: int
     fiber: int
     type: Literal["breakfast", "lunch", "dinner", "snack"]
+    grams: float | None = None
 
 
 class NutritionProgressRequest(BaseModel):

@@ -66,6 +66,7 @@ npm run audit:high
 
 See `STATUS.md` for what's built versus what's still open. Short version: the
 voice bridge and APIs work; meals and sessions persist to SQLite and are scoped
-per user behind Firebase ID token auth (`AUTH_MODE=firebase`). The remaining gap
-is macro accuracy — numbers are estimates rather than looked up from a nutrition
-database. Local dev and tests run with `AUTH_MODE=disabled` (a fixed dev user).
+per user behind Firebase ID token auth (`AUTH_MODE=firebase`). Macros can be
+verified against USDA FoodData Central (`NUTRITION_LOOKUP_MODE=usda`) instead of
+trusting the model's estimate. Local dev and tests run with `AUTH_MODE=disabled`
+(a fixed dev user) and lookup off.

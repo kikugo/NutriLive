@@ -73,6 +73,10 @@ class GeminiUpstreamClient(UpstreamClient):
                                 "type": "OBJECT",
                                 "properties": {
                                     "name": {"type": "STRING"},
+                                    "grams": {
+                                        "type": "NUMBER",
+                                        "description": "Estimated total edible weight of the meal in grams.",
+                                    },
                                     "calories": {"type": "NUMBER"},
                                     "protein": {"type": "NUMBER"},
                                     "carbs": {"type": "NUMBER"},

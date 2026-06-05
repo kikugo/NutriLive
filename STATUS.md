@@ -11,10 +11,10 @@
 A voice-first nutrition logging app. The **infrastructure is real and tested**
 (Gemini Live voice bridge, FastAPI backend, React frontend, CI). Meals and
 sessions **persist to SQLite** and are **scoped per user** behind Firebase ID
-token auth. The remaining product gap: macro numbers are estimates rather than
-looked up from a nutrition database.
+token auth. Macros can be **verified against USDA FoodData Central** instead of
+trusting the LLM estimate (opt-in via `NUTRITION_LOOKUP_MODE=usda`).
 
-- Backend: `app/` — FastAPI. **33 tests passing.**
+- Backend: `app/` — FastAPI. **41 tests passing.**
 - Frontend: `frontend/` — React + Vite + TypeScript.
 - Both status docs were local/untracked. This file is too unless staged.
 
@@ -40,7 +40,8 @@ Env vars (local `.env`, gitignored): `GEMINI_API_KEY`, `GEMINI_MODEL`,
 `APP_ENV`, `UPSTREAM_MODE` (`mock` | `gemini`), `CORS_ORIGINS`,
 `DATABASE_PATH` (SQLite file, defaults to `nutrilive.db`),
 `AUTH_MODE` (`disabled` | `firebase`), `FIREBASE_PROJECT_ID` (required when
-`AUTH_MODE=firebase`).
+`AUTH_MODE=firebase`), `NUTRITION_LOOKUP_MODE` (`off` | `usda`), `USDA_API_KEY`
+(required when `NUTRITION_LOOKUP_MODE=usda`).
 Frontend Firebase config expected at `frontend/firebase-config.json` (gitignored;
 example in `frontend/firebase-config.example.json`).
 
@@ -60,6 +61,7 @@ app/
     meal_store.py         SQLite-backed, scoped by user_id
     session_store.py      SQLite-backed, scoped by user_id
     nutrition.py          pure macro math (totals, progress vs goals)
+    nutrition_lookup.py   USDA FoodData Central lookup (off | usda)
     milestone.py
   auth.py                 get_current_user dependency (Firebase ID token verify)
   db.py                   SQLite connection helper + schema
@@ -75,7 +77,12 @@ frontend/                 React + Vite + TS — canonical user-facing app
 
 - **Gemini Live voice bridge** — real `client.aio.live.connect` session in
   `app/services/upstream.py`: audio in/out, input+output transcription, and a
-  `prepare_meal_log` tool-call that passes the model's args straight through.
+  `prepare_meal_log` tool-call (now also asks the model for an estimated portion
+  in grams).
+- **Macro verification** — `app/services/nutrition_lookup.py`. With
+  `NUTRITION_LOOKUP_MODE=usda`, the bridge replaces the model's estimated macros
+  with USDA per-gram values scaled to the portion, tagged `source="usda"`. With
+  no key, no portion, or no match it keeps the estimate (`source="estimate"`).
 - **Mock mode** for tests/CI (`UPSTREAM_MODE=mock`) — no network needed.
 - **WebSocket flow** `WS /v1/live/ws/{session_id}` with the event families
   documented below; frontend maps these into live voice state.
@@ -111,15 +118,15 @@ frontend/                 React + Vite + TS — canonical user-facing app
 
 ## What Is NOT Done ⚠️ (the real gaps)
 
-### 1. Macro numbers are not real
-- **mock mode**: hardcoded `calories=450, protein=30, ...`
-  (`app/services/live_bridge.py:77`).
-- **gemini mode**: whatever the LLM estimates, passed through unverified.
-- There is **no external nutrition API** (no USDA / Nutritionix). `httpx` is a
-  dev/test dep only.
-- **Decision pending** (see "Open Decision" below). The architecture moved to
-  Gemini-does-the-parsing, so a full Nutritionix integration may be unnecessary;
-  the open question is purely about *accuracy*.
+### 1. Macro accuracy depends on opt-in USDA + a portion estimate
+- The USDA verification layer exists but is **off by default** — until
+  `NUTRITION_LOOKUP_MODE=usda` (+ `USDA_API_KEY`) is set, macros are still the
+  LLM estimate, tagged `source="estimate"`.
+- Even with USDA on, accuracy hinges on **Gemini estimating the portion (grams)**
+  and on the **search returning the right food**. We take the top match only;
+  there's no disambiguation, brand/restaurant data, or multi-ingredient split.
+- **mock mode** still emits placeholder macros (`calories=450, grams=350`) — it's
+  for tests/local, not real numbers.
 
 ### 2. Tech debt
 - WebSocket payloads validated *after* receive, not via a strict schema first.
@@ -128,25 +135,8 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - No rate limiting (`slowapi` or middleware).
 - Frontend Vite build warns on a >500 kB chunk (no code-splitting yet).
 - No frontend e2e/smoke tests for the voice + meal flow.
-
----
-
-## Open Decision: do we even need a nutrition API?
-
-A nutrition API does two jobs: (1) parse NL → food+quantity, (2) look up verified
-macros. Gemini Live now does (1) for free and *estimates* (2). So the only thing
-a nutrition API adds today is **macro accuracy**.
-
-| Option | Parsing | Accuracy | Cost | Effort |
-|---|---|---|---|---|
-| Gemini-only (current) | ✅ | ⚠️ estimate | $0 | done |
-| + USDA FoodData Central | reuse Gemini | ✅ verified | free | medium |
-| + Nutritionix | ✅ | ✅ verified | $99/mo | medium |
-| Drop the idea (v1) | ✅ | ⚠️ accept estimates | $0 | none |
-
-Recommendation: if accuracy matters, add **USDA as a verification layer** (Gemini
-parses the food, USDA supplies real macros) — free and reuses Gemini's strength.
-This is now the top open product gap.
+- Frontend stores meals in **Firestore directly**, not via the backend
+  `/v1/meals` store — two sources of truth to reconcile eventually.
 
 ---
 
@@ -158,8 +148,10 @@ This is now the top open product gap.
    `app/auth.py`; meal/session data scoped by `user_id`. To turn it on, set
    `AUTH_MODE=firebase` and `FIREBASE_PROJECT_ID`. Next step when needed: WS-path
    auth (currently the session id is the capability) and a persisted user record.
-3. **Nutrition accuracy** — resolve the decision above (likely USDA layer).
-   Now the top open gap.
+3. ~~**Nutrition accuracy**~~ — done (opt-in). USDA verification layer in
+   `app/services/nutrition_lookup.py`; enable with `NUTRITION_LOOKUP_MODE=usda`.
+   Possible follow-ups: surface `source`/`matched_name` in the confirm modal,
+   add food disambiguation, reconcile Firestore vs backend meal storage.
 4. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
 
 ---

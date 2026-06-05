@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     database_path: str = "nutrilive.db"
     auth_mode: str = "disabled"
     firebase_project_id: str | None = None
+    nutrition_lookup_mode: str = "off"
+    usda_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

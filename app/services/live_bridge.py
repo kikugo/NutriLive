@@ -3,20 +3,50 @@ import asyncio
 from fastapi import WebSocket
 
 from app.schemas import PrepareMealLogArgs
+from app.services.nutrition_lookup import NutritionLookup, create_nutrition_lookup
 from app.services.upstream import UpstreamClient, create_upstream_client
 
 
 class LiveBridge:
-    def __init__(self, upstream_client: UpstreamClient | None = None) -> None:
+    def __init__(
+        self,
+        upstream_client: UpstreamClient | None = None,
+        nutrition_lookup: NutritionLookup | None = None,
+    ) -> None:
         self._upstream_client = upstream_client or create_upstream_client()
+        self._nutrition_lookup = nutrition_lookup or create_nutrition_lookup()
         self._send_lock = asyncio.Lock()
 
     async def _send_json(self, websocket: WebSocket, payload: dict) -> None:
         async with self._send_lock:
             await websocket.send_json(payload)
 
+    async def _enrich_meal_tool_call(self, event: dict) -> dict:
+        """Replace estimated macros with USDA-backed numbers when available."""
+        if event.get("type") != "tool_call" or event.get("name") != "prepare_meal_log":
+            return event
+
+        args = dict(event.get("args") or {})
+        result = await self._nutrition_lookup.lookup(args.get("name"), args.get("grams"))
+        if result is not None:
+            args.update(
+                {
+                    "calories": result.calories,
+                    "protein": result.protein,
+                    "carbs": result.carbs,
+                    "fat": result.fat,
+                    "fiber": result.fiber,
+                    "source": result.source,
+                }
+            )
+            if result.matched_name:
+                args["matched_name"] = result.matched_name
+        else:
+            args.setdefault("source", "estimate")
+        return {**event, "args": args}
+
     async def _handle_upstream_event(self, websocket: WebSocket, event: dict) -> None:
-        await self._send_json(websocket, event)
+        await self._send_json(websocket, await self._enrich_meal_tool_call(event))
 
     async def handle_start(self, websocket: WebSocket) -> None:
         await self._upstream_client.start(
@@ -80,8 +110,9 @@ class LiveBridge:
                 fat=15,
                 fiber=8,
                 type="lunch",
+                grams=350,
             )
-            await self._send_json(
+            await self._handle_upstream_event(
                 websocket,
                 {
                     "type": "tool_call",
