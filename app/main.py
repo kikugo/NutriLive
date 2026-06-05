@@ -2,6 +2,9 @@ from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from uuid import uuid4
 
 from app.auth import AuthUser, get_current_user
@@ -14,7 +17,11 @@ from app.services.session_store import session_store
 
 settings = get_settings()
 
+limiter = Limiter(key_func=get_remote_address, enabled=settings.rate_limit_enabled)
+
 app = FastAPI(title="NutriLive Backend", version="0.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
@@ -50,7 +57,10 @@ def root() -> dict:
 
 
 @app.post("/v1/live/session", response_model=SessionCreateResponse)
-def create_live_session(user: AuthUser = Depends(get_current_user)) -> SessionCreateResponse:
+@limiter.limit("30/minute")
+def create_live_session(
+    request: Request, user: AuthUser = Depends(get_current_user)
+) -> SessionCreateResponse:
     session = session_store.create(user.uid)
     return SessionCreateResponse(session_id=session.session_id)
 
@@ -110,13 +120,15 @@ def expire_idle_live_sessions(
 
 
 @app.post("/v1/nutrition/daily-stats")
-def get_daily_stats(meals: list[Meal]) -> dict:
+@limiter.limit("60/minute")
+def get_daily_stats(request: Request, meals: list[Meal]) -> dict:
     stats = calculate_daily_stats(meals)
     return stats.model_dump()
 
 
 @app.post("/v1/nutrition/progress")
-def get_nutrition_progress(payload: NutritionProgressRequest) -> dict:
+@limiter.limit("60/minute")
+def get_nutrition_progress(request: Request, payload: NutritionProgressRequest) -> dict:
     return calculate_progress(payload.meals, payload.goals)
 
 

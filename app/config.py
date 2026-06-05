@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     nutrition_lookup_mode: str = "off"
     usda_api_key: str | None = None
+    rate_limit_enabled: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
