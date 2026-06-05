@@ -9,7 +9,6 @@ from app.config import get_settings
 from app.contracts.nutrition import Meal
 from app.schemas import AudioChunkEvent, NutritionProgressRequest, SessionCreateResponse, TextEvent
 from app.services.live_bridge import LiveBridge
-from app.services.milestone import context_retirement_status
 from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
 
@@ -119,14 +118,6 @@ def get_daily_stats(meals: list[Meal]) -> dict:
 @app.post("/v1/nutrition/progress")
 def get_nutrition_progress(payload: NutritionProgressRequest) -> dict:
     return calculate_progress(payload.meals, payload.goals)
-
-
-@app.get("/v1/milestone/context-retirement")
-def get_context_retirement_milestone() -> dict:
-    from pathlib import Path
-
-    project_root = Path(__file__).resolve().parent.parent
-    return context_retirement_status(project_root)
 
 
 @app.websocket("/v1/live/ws/{session_id}")

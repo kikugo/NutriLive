@@ -58,7 +58,6 @@ npm run audit:high
 - `WS /v1/live/ws/{session_id}`
 - `POST /v1/nutrition/daily-stats`
 - `POST /v1/nutrition/progress`
-- `GET /v1/milestone/context-retirement`
 
 Meals are stored in Firestore by the frontend (`users/{uid}/meals`), not via a
 backend endpoint.

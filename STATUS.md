@@ -61,10 +61,8 @@ app/
     session_store.py      SQLite-backed, scoped by user_id
     nutrition.py          pure macro math (totals, progress vs goals)
     nutrition_lookup.py   USDA FoodData Central lookup (off | usda)
-    milestone.py
   auth.py                 get_current_user dependency (Firebase ID token verify)
   db.py                   SQLite connection helper + schema
-  web/                    legacy minimal HTML/JS UI (superseded by frontend/)
 
 frontend/                 React + Vite + TS — canonical user-facing app
   src/App.tsx, firebase.ts, types.ts, lib/utils.ts
@@ -109,7 +107,6 @@ frontend/                 React + Vite + TS — canonical user-facing app
   `GET /v1/live/stats` `A`, `POST /v1/live/cleanup` `A`,
   `POST /v1/live/expire-idle` `A`
 - `POST /v1/nutrition/daily-stats`, `POST /v1/nutrition/progress` (stateless math)
-- `GET /v1/milestone/context-retirement`
 - Meals are not a backend endpoint — the frontend reads/writes Firestore directly.
 
 ### WebSocket events
@@ -138,9 +135,6 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - No rate limiting (`slowapi` or middleware).
 - Frontend Vite build warns on a >500 kB chunk (no code-splitting yet).
 - No frontend e2e/smoke tests for the voice + meal flow.
-- `app/web/` legacy UI and the `/v1/milestone/context-retirement` endpoint are
-  vestigial (the `app/web/app.js` still calls the now-removed `/v1/meals`). Safe
-  to delete in a follow-up.
 - Meals only live in Firestore — the backend can't read meal history server-side
   (needed later for coach mode / weekly trends) until `firebase-admin` is added.
 
@@ -161,8 +155,7 @@ frontend/                 React + Vite + TS — canonical user-facing app
 4. ~~**Reconcile meal storage**~~ — done. Firestore is the single source of truth
    for meals; the unused backend SQLite meal store and `/v1/meals` endpoints were
    removed.
-5. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests,
-   delete the vestigial `app/web/` UI + milestone endpoint.
+5. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
 
 ---
 
