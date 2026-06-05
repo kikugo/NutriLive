@@ -103,6 +103,30 @@ def test_ws_allows_separate_sessions() -> None:
         assert ready["type"] == "ready"
 
 
+def test_ws_rejects_non_object_payload() -> None:
+    response = client.post("/v1/live/session")
+    session_id = response.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json(["not", "an", "object"])
+        error_event = websocket.receive_json()
+        assert error_event["type"] == "error"
+        assert error_event["code"] == "INVALID_PAYLOAD"
+
+
+def test_ws_rejects_payload_without_type() -> None:
+    response = client.post("/v1/live/session")
+    session_id = response.json()["session_id"]
+
+    with client.websocket_connect(f"/v1/live/ws/{session_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json({"text": "missing type field"})
+        error_event = websocket.receive_json()
+        assert error_event["type"] == "error"
+        assert error_event["code"] == "INVALID_PAYLOAD"
+
+
 def test_ws_rejects_unsupported_event_type() -> None:
     response = client.post("/v1/live/session")
     session_id = response.json()["session_id"]

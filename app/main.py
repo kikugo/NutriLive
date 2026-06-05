@@ -144,8 +144,15 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     try:
         while True:
             payload = await websocket.receive_json()
+
+            if not isinstance(payload, dict) or not isinstance(payload.get("type"), str):
+                await send_ws_error(
+                    websocket, "INVALID_PAYLOAD", "Event must be an object with a string 'type'"
+                )
+                continue
+
             session_store.touch(session_id)
-            event_type = payload.get("type")
+            event_type = payload["type"]
 
             if event_type == "start":
                 try:
