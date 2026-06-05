@@ -303,7 +303,11 @@ function NutriLiveApp() {
     playbackContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
     try {
-      const created = await fetch(`${BACKEND_URL}/v1/live/session`, { method: 'POST' });
+      const idToken = await auth.currentUser?.getIdToken();
+      const created = await fetch(`${BACKEND_URL}/v1/live/session`, {
+        method: 'POST',
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      });
       if (!created.ok) {
         throw new Error('Failed to initialize live session');
       }
