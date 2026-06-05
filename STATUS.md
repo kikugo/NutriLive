@@ -137,14 +137,7 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - **mock mode** still emits placeholder macros (`calories=450, grams=350`) — it's
   for tests/local, not real numbers.
 
-### 2. Pre-existing dependency vulnerabilities (CI `audit:high` is red)
-- `protobufjs` (critical) via `firebase → @firebase/firestore → @grpc/proto-loader`.
-- `vite` (high) at `6.4.1`. Both predate the test tooling; vitest just deduped
-  to the existing vite.
-- Fix is a deliberate `firebase` / `vite` bump (dependabot is configured weekly),
-  not part of the polish work. Until then the frontend CI `audit:high` step fails.
-
-### 3. Tech debt
+### 2. Tech debt
 - LiveBridge error handling is generic — upstream failures can look like parse
   errors.
 - Frontend smoke test only covers the logged-out render; no coverage of the live
@@ -170,9 +163,10 @@ frontend/                 React + Vite + TS — canonical user-facing app
    for meals; the unused backend SQLite meal store and `/v1/meals` endpoints were
    removed.
 5. ~~**Polish**~~ — done. WS envelope validation, per-client rate limiting,
-   vendor chunk-splitting (removed the >500 kB warning), and a Vitest smoke test
-   wired into CI. Remaining: bump `firebase`/`vite` for the audit vulns, deepen
-   frontend coverage, and `firebase-admin` for server-side meal history.
+   vendor chunk-splitting (removed the >500 kB warning), a Vitest smoke test wired
+   into CI, and the `vite`/`protobufjs` audit vulns patched (lockfile-only, CI
+   `audit:high` green). Remaining: deepen frontend coverage and add
+   `firebase-admin` for server-side meal history.
 
 ---
 
