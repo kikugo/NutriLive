@@ -28,12 +28,14 @@ do not use it).
 ```bash
 uv venv --python 3.12 --seed          # create .venv
 uv pip install -e ".[dev]"            # runtime + dev deps (pytest, httpx)
-.venv/bin/python -m pytest -q         # 39 passing
+.venv/bin/python -m pytest -q         # 40 passing
 uvicorn app.main:app --reload         # backend on :8000
 ```
 
 ```bash
 cd frontend && npm ci && npm run dev  # frontend on :3000
+npm test                              # vitest smoke test
+npm run build                         # production build (chunked)
 ```
 
 Env vars (local `.env`, gitignored): `GEMINI_API_KEY`, `GEMINI_MODEL`,
@@ -41,7 +43,8 @@ Env vars (local `.env`, gitignored): `GEMINI_API_KEY`, `GEMINI_MODEL`,
 `DATABASE_PATH` (SQLite file, defaults to `nutrilive.db`),
 `AUTH_MODE` (`disabled` | `firebase`), `FIREBASE_PROJECT_ID` (required when
 `AUTH_MODE=firebase`), `NUTRITION_LOOKUP_MODE` (`off` | `usda`), `USDA_API_KEY`
-(required when `NUTRITION_LOOKUP_MODE=usda`).
+(required when `NUTRITION_LOOKUP_MODE=usda`), `RATE_LIMIT_ENABLED` (default
+`true`).
 Frontend Firebase config expected at `frontend/firebase-config.json` (gitignored;
 example in `frontend/firebase-config.example.json`).
 
@@ -95,9 +98,15 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - **Frontend**: live voice modal, transcript updates, audio playback queue,
   meal-confirm modal with edit-before-save and a USDA-verified/estimated badge,
   dashboard empty/error states.
-- **Security/ops**: `frontend/.npmrc` (save-exact), CI (`.github/workflows/ci.yml`),
-  dependabot (`.github/dependabot.yml`). The 5 pruned frontend deps are gone.
-- **Tests**: 9 files, 39 tests, all green.
+- **Rate limiting**: `slowapi` per-client limits — `POST /v1/live/session`
+  (30/min) and the nutrition endpoints (60/min). Toggle with `RATE_LIMIT_ENABLED`.
+- **Inbound WS validation**: every frame is checked as a well-formed envelope
+  (object with a string `type`) before dispatch; `audio_chunk`/`text` payloads
+  are Pydantic-validated.
+- **Security/ops**: `frontend/.npmrc` (save-exact), CI (`.github/workflows/ci.yml`,
+  runs backend pytest + frontend lint/test/build/audit), dependabot. The 5 pruned
+  frontend deps are gone.
+- **Tests**: backend 40 (pytest), frontend 1 smoke test (vitest), all green.
 
 ### Endpoints
 (`A` = requires auth in `firebase` mode and is scoped to the caller's user)
@@ -128,13 +137,18 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - **mock mode** still emits placeholder macros (`calories=450, grams=350`) — it's
   for tests/local, not real numbers.
 
-### 2. Tech debt
-- WebSocket payloads validated *after* receive, not via a strict schema first.
+### 2. Pre-existing dependency vulnerabilities (CI `audit:high` is red)
+- `protobufjs` (critical) via `firebase → @firebase/firestore → @grpc/proto-loader`.
+- `vite` (high) at `6.4.1`. Both predate the test tooling; vitest just deduped
+  to the existing vite.
+- Fix is a deliberate `firebase` / `vite` bump (dependabot is configured weekly),
+  not part of the polish work. Until then the frontend CI `audit:high` step fails.
+
+### 3. Tech debt
 - LiveBridge error handling is generic — upstream failures can look like parse
   errors.
-- No rate limiting (`slowapi` or middleware).
-- Frontend Vite build warns on a >500 kB chunk (no code-splitting yet).
-- No frontend e2e/smoke tests for the voice + meal flow.
+- Frontend smoke test only covers the logged-out render; no coverage of the live
+  voice + meal-confirm flow (needs Firestore/WebSocket/Gemini mocking).
 - Meals only live in Firestore — the backend can't read meal history server-side
   (needed later for coach mode / weekly trends) until `firebase-admin` is added.
 
@@ -155,7 +169,10 @@ frontend/                 React + Vite + TS — canonical user-facing app
 4. ~~**Reconcile meal storage**~~ — done. Firestore is the single source of truth
    for meals; the unused backend SQLite meal store and `/v1/meals` endpoints were
    removed.
-5. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
+5. ~~**Polish**~~ — done. WS envelope validation, per-client rate limiting,
+   vendor chunk-splitting (removed the >500 kB warning), and a Vitest smoke test
+   wired into CI. Remaining: bump `firebase`/`vite` for the audit vulns, deepen
+   frontend coverage, and `firebase-admin` for server-side meal history.
 
 ---
 
