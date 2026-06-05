@@ -150,8 +150,9 @@ frontend/                 React + Vite + TS — canonical user-facing app
    auth (currently the session id is the capability) and a persisted user record.
 3. ~~**Nutrition accuracy**~~ — done (opt-in). USDA verification layer in
    `app/services/nutrition_lookup.py`; enable with `NUTRITION_LOOKUP_MODE=usda`.
-   Possible follow-ups: surface `source`/`matched_name` in the confirm modal,
-   add food disambiguation, reconcile Firestore vs backend meal storage.
+   The confirm modal now shows a "USDA verified" / "Estimated" badge so users
+   know which numbers are database-backed. Possible follow-ups: food
+   disambiguation, reconcile Firestore vs backend meal storage.
 4. **Polish** — WS schema validation, rate limiting, chunk-splitting, e2e tests.
 
 ---
