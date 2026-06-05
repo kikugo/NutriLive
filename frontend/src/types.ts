@@ -17,6 +17,9 @@ export interface Meal {
   fiber: number;
   timestamp: string;
   type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  grams?: number;
+  source?: 'usda' | 'estimate';
+  matched_name?: string;
 }
 
 export interface DailyStats {

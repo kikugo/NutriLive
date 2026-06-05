@@ -767,6 +767,15 @@ function NutriLiveApp() {
                   <h2 className="text-xl font-bold leading-tight">
                     Logged {pendingMeal.name} for {pendingMeal.type}.
                   </h2>
+                  {pendingMeal.source === 'usda' ? (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded-full text-[11px] font-semibold bg-green-50 text-green-700">
+                      ✓ USDA verified{pendingMeal.matched_name ? ` · ${pendingMeal.matched_name}` : ''}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
+                      ~ Estimated — adjust if needed
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-3">
