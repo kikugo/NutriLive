@@ -6,6 +6,36 @@ from typing import Awaitable, Callable, Optional
 from app.config import get_settings
 
 
+class UpstreamError(RuntimeError):
+    """Base for live/upstream failures. ``code`` maps to a websocket error code."""
+
+    code = "UPSTREAM_ERROR"
+
+
+class UpstreamNotStartedError(UpstreamError):
+    """A streaming call arrived before the session was started."""
+
+    code = "SESSION_NOT_STARTED"
+
+
+class UpstreamInitError(UpstreamError):
+    """The upstream client could not be initialized (bad config, missing key)."""
+
+    code = "UPSTREAM_INIT_FAILED"
+
+
+class UpstreamTimeoutError(UpstreamError):
+    """The upstream did not respond within the allotted time."""
+
+    code = "UPSTREAM_TIMEOUT"
+
+
+class UpstreamUnavailableError(UpstreamError):
+    """The upstream stream failed after the session was established."""
+
+    code = "UPSTREAM_UNAVAILABLE"
+
+
 @dataclass
 class UpstreamResponse:
     text: str
@@ -24,11 +54,11 @@ class UpstreamClient:
 
     async def send_audio_chunk(self, _: str, __: str) -> None:
         if not self._started:
-            raise RuntimeError("Upstream session has not started")
+            raise UpstreamNotStartedError("Upstream session has not started")
 
     async def send_text(self, text: str) -> UpstreamResponse:
         if not self._started:
-            raise RuntimeError("Upstream session has not started")
+            raise UpstreamNotStartedError("Upstream session has not started")
         return UpstreamResponse(text=f"I heard: {text}", tool_call="log meal" in text.lower())
 
     async def stop(self) -> None:
@@ -51,11 +81,11 @@ class GeminiUpstreamClient(UpstreamClient):
     async def start(self, event_handler: Optional[EventHandler] = None) -> None:
         settings = get_settings()
         if not settings.gemini_api_key:
-            raise RuntimeError("GEMINI_API_KEY is required when UPSTREAM_MODE=gemini")
+            raise UpstreamInitError("GEMINI_API_KEY is required when UPSTREAM_MODE=gemini")
         try:
             from google import genai
         except Exception as exc:  # pragma: no cover
-            raise RuntimeError("google-genai is not installed") from exc
+            raise UpstreamInitError("google-genai is not installed") from exc
 
         self._client = genai.Client(api_key=settings.gemini_api_key)
         self._event_handler = event_handler
@@ -104,25 +134,31 @@ class GeminiUpstreamClient(UpstreamClient):
 
     async def send_text(self, text: str) -> UpstreamResponse:
         if not self._started or self._session is None:
-            raise RuntimeError("Upstream session has not started")
-        await asyncio.wait_for(
-            self._session.send_client_content(turns=text, turn_complete=True),
-            timeout=15,
-        )
+            raise UpstreamNotStartedError("Upstream session has not started")
+        try:
+            await asyncio.wait_for(
+                self._session.send_client_content(turns=text, turn_complete=True),
+                timeout=15,
+            )
+        except asyncio.TimeoutError as exc:
+            raise UpstreamTimeoutError("Timed out sending text to upstream") from exc
         return UpstreamResponse(text="", tool_call=False)
 
     async def send_audio_chunk(self, data: str, mime_type: str) -> None:
         if not self._started or self._session is None:
-            raise RuntimeError("Upstream session has not started")
+            raise UpstreamNotStartedError("Upstream session has not started")
         from google.genai import types
 
         audio_bytes = base64.b64decode(data)
-        await asyncio.wait_for(
-            self._session.send_realtime_input(
-                audio=types.Blob(data=audio_bytes, mime_type=mime_type)
-            ),
-            timeout=10,
-        )
+        try:
+            await asyncio.wait_for(
+                self._session.send_realtime_input(
+                    audio=types.Blob(data=audio_bytes, mime_type=mime_type)
+                ),
+                timeout=10,
+            )
+        except asyncio.TimeoutError as exc:
+            raise UpstreamTimeoutError("Timed out sending audio to upstream") from exc
 
     async def _receive_loop(self) -> None:
         if self._session is None:
@@ -199,7 +235,7 @@ class GeminiUpstreamClient(UpstreamClient):
 
     def ensure_healthy(self) -> None:
         if self._receive_error:
-            raise RuntimeError("Upstream receive loop failed") from self._receive_error
+            raise UpstreamUnavailableError("Upstream receive loop failed") from self._receive_error
 
 
 def create_upstream_client() -> UpstreamClient:
@@ -209,4 +245,4 @@ def create_upstream_client() -> UpstreamClient:
         return GeminiUpstreamClient()
     if mode == "mock":
         return UpstreamClient()
-    raise RuntimeError(f"Unsupported UPSTREAM_MODE: {settings.upstream_mode}")
+    raise UpstreamInitError(f"Unsupported UPSTREAM_MODE: {settings.upstream_mode}")

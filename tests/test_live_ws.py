@@ -82,7 +82,7 @@ def test_ws_requires_start_before_streaming() -> None:
         )
         error_event = websocket.receive_json()
         assert error_event["type"] == "error"
-        assert error_event["code"] == "UPSTREAM_ERROR"
+        assert error_event["code"] == "SESSION_NOT_STARTED"
 
 
 def test_ws_allows_separate_sessions() -> None:

@@ -14,6 +14,7 @@ from app.schemas import AudioChunkEvent, NutritionProgressRequest, SessionCreate
 from app.services.live_bridge import LiveBridge
 from app.services.nutrition import calculate_daily_stats, calculate_progress
 from app.services.session_store import session_store
+from app.services.upstream import UpstreamError
 
 settings = get_settings()
 
@@ -145,8 +146,8 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
     session_store.set_status(session_id, "active")
     try:
         live_bridge = LiveBridge()
-    except RuntimeError as exc:
-        await send_ws_error(websocket, "UPSTREAM_INIT_FAILED", str(exc))
+    except UpstreamError as exc:
+        await send_ws_error(websocket, exc.code, str(exc))
         session_store.set_status(session_id, "closed")
         await websocket.close(code=1011)
         return
@@ -169,7 +170,9 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
             if event_type == "start":
                 try:
                     await live_bridge.handle_start(websocket)
-                except RuntimeError as exc:
+                except UpstreamError as exc:
+                    await send_ws_error(websocket, exc.code, str(exc))
+                except Exception as exc:  # keep the loop alive on unexpected errors
                     await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
             elif event_type == "audio_chunk":
                 try:
@@ -179,7 +182,9 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
                     continue
                 try:
                     await live_bridge.handle_audio_chunk(websocket, validated_payload)
-                except RuntimeError as exc:
+                except UpstreamError as exc:
+                    await send_ws_error(websocket, exc.code, str(exc))
+                except Exception as exc:  # keep the loop alive on unexpected errors
                     await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
             elif event_type == "text":
                 try:
@@ -189,12 +194,16 @@ async def live_session_ws(websocket: WebSocket, session_id: str) -> None:
                     continue
                 try:
                     await live_bridge.handle_text(websocket, validated_payload)
-                except RuntimeError as exc:
+                except UpstreamError as exc:
+                    await send_ws_error(websocket, exc.code, str(exc))
+                except Exception as exc:  # keep the loop alive on unexpected errors
                     await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
             elif event_type == "stop":
                 try:
                     await live_bridge.handle_stop(websocket)
-                except RuntimeError as exc:
+                except UpstreamError as exc:
+                    await send_ws_error(websocket, exc.code, str(exc))
+                except Exception as exc:  # keep the loop alive on unexpected errors
                     await send_ws_error(websocket, "UPSTREAM_ERROR", str(exc))
                 break
             elif event_type == "close":

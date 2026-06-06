@@ -103,6 +103,11 @@ frontend/                 React + Vite + TS — canonical user-facing app
 - **Inbound WS validation**: every frame is checked as a well-formed envelope
   (object with a string `type`) before dispatch; `audio_chunk`/`text` payloads
   are Pydantic-validated.
+- **Typed upstream errors**: `app/services/upstream.py` raises a `UpstreamError`
+  hierarchy with distinct WS codes — `SESSION_NOT_STARTED`, `UPSTREAM_TIMEOUT`,
+  `UPSTREAM_UNAVAILABLE`, `UPSTREAM_INIT_FAILED` — separate from client-side
+  `INVALID_*` parse errors. Unexpected errors fall back to `UPSTREAM_ERROR`
+  without dropping the connection.
 - **Security/ops**: `frontend/.npmrc` (save-exact), CI (`.github/workflows/ci.yml`,
   runs backend pytest + frontend lint/test/build/audit), dependabot. The 5 pruned
   frontend deps are gone.
@@ -138,8 +143,6 @@ frontend/                 React + Vite + TS — canonical user-facing app
   for tests/local, not real numbers.
 
 ### 2. Tech debt
-- LiveBridge error handling is generic — upstream failures can look like parse
-  errors.
 - Frontend smoke test only covers the logged-out render; no coverage of the live
   voice + meal-confirm flow (needs Firestore/WebSocket/Gemini mocking).
 - Meals only live in Firestore — the backend can't read meal history server-side
