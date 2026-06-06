@@ -33,6 +33,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
+      - name: Provide placeholder Firebase config
+        # The real firebase-config.json is gitignored; the example gives tsc and
+        # the build the right shape without committing secrets.
+        run: cp firebase-config.example.json firebase-config.json
       - name: Run frontend lint
         run: npm run lint
       - name: Run frontend tests
